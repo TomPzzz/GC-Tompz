@@ -102,6 +102,32 @@ th.grp { border-left: 1px solid var(--line); }
 td.grp { border-left: 1px solid var(--row); }
 .legend { font-size: 12px; color: var(--muted); max-width: 80ch; }
 
+/* Ranking */
+.rank { display: flex; flex-direction: column; gap: 8px; }
+.rrow { background: var(--surface); border: 1px solid var(--line); display: grid; grid-template-columns: 44px minmax(110px, 160px) 90px minmax(0, 1fr); gap: 16px; align-items: center; padding: 12px 16px; }
+.rrow.first { border-color: var(--accent); }
+.rpos { font-family: var(--display); font-size: 26px; font-weight: 700; color: var(--muted); line-height: 1; }
+.rrow.first .rpos { color: var(--accent); }
+.rname { font-weight: 600; font-size: 16px; min-width: 0; }
+.rname small { display: block; font-size: 12px; font-weight: 400; color: var(--muted); }
+.rscore { font-family: var(--display); font-size: 26px; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
+.rscore small { display: block; font-family: var(--body); font-size: 11px; font-weight: 400; color: var(--muted); letter-spacing: .06em; text-transform: uppercase; margin-top: 3px; }
+.rbars { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 10px; min-width: 0; }
+.rbar { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.rbar .lb { font-size: 10px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rbar .tr { height: 6px; background: var(--row); position: relative; }
+.rbar .tr::after { content: ""; position: absolute; left: 50%; top: -2px; bottom: -2px; width: 1px; background: var(--muted); opacity: .6; }
+.rbar .fl { position: absolute; top: 0; bottom: 0; }
+.rbar .fl.up { left: 50%; background: var(--win); }
+.rbar .fl.down { right: 50%; background: var(--loss); }
+.rbar .v { font-family: var(--mono); font-size: 12px; font-variant-numeric: tabular-nums; }
+.rbar .v.up { color: var(--win); } .rbar .v.down { color: var(--loss); }
+.rout { font-size: 13px; color: var(--muted); }
+@media (max-width: 860px) {
+  .rrow { grid-template-columns: 36px minmax(0, 1fr) auto; }
+  .rbars { grid-column: 1 / -1; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
 /* Mapas */
 .winbar { display: inline-block; width: 70px; height: 6px; background: var(--row); position: relative; vertical-align: middle; margin-right: 8px; }
 .winbar span { position: absolute; inset: 0 auto 0 0; background: var(--win); }
@@ -173,6 +199,12 @@ footer code { font-family: var(--mono); color: var(--ink); }
     </div>
     <div class="period" id="period"></div>
   </div>
+
+  <section class="section" id="rankSec" hidden>
+    <h2>Ranking do período</h2>
+    <div class="rank" id="rank"></div>
+    <div class="legend">Cada métrica é comparada com a média do stack no período: 100 = na média, 110 = 10% acima. A nota final é a soma ponderada: ADR 30%, K/D 20%, KAST 20%, first kills por round 10%, rounds com 3K+ por round 10% e % de vitória 10%. Entra no ranking quem jogou pelo menos 30% das partidas do período.</div>
+  </section>
 
   <section class="section" id="awardsSec" hidden>
     <h2>Destaques do período</h2>
@@ -340,6 +372,51 @@ function renderAwards(stats) {
   box.replaceChildren(...awards.map(([t, s, f]) => { const d = el("div", "award"); d.append(el("span", "t", t), el("span", "who", s.nick), el("span", "val", f(s))); return d; }));
 }
 
+const RANK_METRICS = [
+  { key: "adr", label: "ADR", w: 30 },
+  { key: "kdr", label: "K/D", w: 20 },
+  { key: "kastPct", label: "KAST", w: 20 },
+  { key: "fkr", label: "First kills", w: 10 },
+  { key: "mk3r", label: "3K+", w: 10 },
+  { key: "winPct", label: "Vitórias", w: 10 }
+];
+function renderRank(stats, matches) {
+  const sec = document.getElementById("rankSec"), box = document.getElementById("rank");
+  const minP = Math.max(1, Math.ceil(matches.length * 0.3));
+  const rows = stats.filter(s => s.matches >= minP).map(s => ({ ...s, fkr: s.rounds ? s.fk / s.rounds : 0, mk3r: s.rounds ? s.mk3 / s.rounds : 0 }));
+  const out = stats.filter(s => s.matches && s.matches < minP);
+  sec.hidden = rows.length < 2;
+  if (rows.length < 2) return;
+  const avg = {};
+  RANK_METRICS.forEach(m => avg[m.key] = rows.reduce((t, r) => t + r[m.key], 0) / rows.length);
+  rows.forEach(r => {
+    r.idx = {};
+    RANK_METRICS.forEach(m => r.idx[m.key] = avg[m.key] ? 100 * r[m.key] / avg[m.key] : 100);
+    r.score = RANK_METRICS.reduce((t, m) => t + m.w * r.idx[m.key], 0) / 100;
+  });
+  rows.sort((a, b) => b.score - a.score);
+  const nodes = rows.map((r, i) => {
+    const row = el("div", "rrow" + (i === 0 ? " first" : ""));
+    const name = el("div", "rname", r.nick); if (r.me) name.append(el("span", "me-tag", "você"));
+    name.append(el("small", null, `${r.matches} ${r.matches === 1 ? "partida" : "partidas"}`));
+    const sc = el("div", "rscore", r.score.toFixed(1)); sc.append(el("small", null, "nota"));
+    const bars = el("div", "rbars");
+    RANK_METRICS.forEach(m => {
+      const v = r.idx[m.key], diff = v - 100, dir = diff >= 0 ? "up" : "down";
+      const b = el("div", "rbar"); b.title = `${m.label}: ${v.toFixed(0)} (peso ${m.w}%)`;
+      const tr = el("div", "tr"), fl = el("span", "fl " + dir);
+      fl.style.width = Math.min(50, Math.abs(diff) * 1.5) + "%";
+      tr.append(fl);
+      b.append(el("span", "lb", m.label), tr, el("span", "v " + (Math.abs(diff) < 0.5 ? "" : dir), v.toFixed(0)));
+      bars.append(b);
+    });
+    row.append(el("div", "rpos", String(i + 1)), name, sc, bars);
+    return row;
+  });
+  if (out.length) nodes.push(el("div", "rout", `Fora do ranking por terem menos de ${minP} ${minP === 1 ? "partida" : "partidas"} no período: ${out.map(s => s.nick).join(", ")}.`));
+  box.replaceChildren(...nodes);
+}
+
 function statTable(rows, cols, opts = {}) {
   const box = el("div", "tablebox");
   const t = el("table", opts.wide ? "wide" : null), thead = el("thead"), tr = el("tr");
@@ -477,6 +554,7 @@ function render() {
   const stats = aggregate(matches);
   renderPeriod(matches);
   renderRecord(matches);
+  renderRank(stats, matches);
   renderAwards(stats);
   renderBoard(stats, matches);
   renderMaps(matches);
