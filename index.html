@@ -1,0 +1,510 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Stack do TomPz</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: período no topo → placar do período → destaques → tabela do stack → mapas → histórico por dia. Painel tático: concreto frio, tinta azul-aço, âmbar de C4 como acento. */
+:root {
+  --bg: #eef0f2;
+  --surface: #f9fafb;
+  --ink: #18202b;
+  --muted: #5b6675;
+  --line: #d3d8de;
+  --accent: #c4720d;
+  --accent-soft: #f5e4cc;
+  --ct: #2d5b8f;
+  --win: #2f7d4f;
+  --loss: #b23a3a;
+  --row: #e5e8ec;
+  --display: "Chakra Petch", "Segoe UI", system-ui, sans-serif;
+  --body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #12161c; --surface: #1a2029; --ink: #e4e8ee; --muted: #8c97a6; --line: #2b3440;
+    --accent: #f0a23c; --accent-soft: #3a2c18; --ct: #7aa7dc; --win: #5fbf86; --loss: #e57373; --row: #202833;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #12161c; --surface: #1a2029; --ink: #e4e8ee; --muted: #8c97a6; --line: #2b3440;
+  --accent: #f0a23c; --accent-soft: #3a2c18; --ct: #7aa7dc; --win: #5fbf86; --loss: #e57373; --row: #202833;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+[hidden] { display: none !important; }
+img { max-width: 100%; }
+body { background: var(--bg); color: var(--ink); font-family: var(--body); font-size: 15px; line-height: 1.5; }
+.wrap { max-width: 1120px; margin: 0 auto; padding-inline: 20px; padding-block: 28px 48px; display: flex; flex-direction: column; gap: 32px; }
+.num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+h1, h2 { font-family: var(--display); margin: 0; text-wrap: balance; }
+h2 { font-size: 15px; font-weight: 600; text-transform: uppercase; letter-spacing: .12em; color: var(--muted); }
+.section { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+
+/* Cabeçalho */
+.head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 20px; border-bottom: 2px solid var(--ink); padding-bottom: 18px; }
+.head .eyebrow { font-family: var(--mono); font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: var(--accent); }
+.head h1 { font-size: clamp(30px, 6vw, 46px); font-weight: 700; line-height: 1.05; letter-spacing: -.01em; }
+.roster { font-size: 14px; color: var(--muted); margin-top: 6px; }
+.roster b { color: var(--ink); font-weight: 600; }
+.record { display: flex; gap: 22px; flex-wrap: wrap; }
+.record div { display: flex; flex-direction: column; }
+.record .v { font-family: var(--display); font-size: 30px; font-weight: 700; line-height: 1; }
+.record .l { font-size: 11px; text-transform: uppercase; letter-spacing: .1em; color: var(--muted); margin-top: 4px; }
+.record .w { color: var(--win); } .record .ls { color: var(--loss); }
+
+/* Filtro de período */
+.filter { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); padding-block: 10px; margin-block: -10px; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; border-bottom: 1px solid var(--line); }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { font: 500 13px var(--body); color: var(--ink); background: var(--surface); border: 1px solid var(--line); padding: 5px 12px; cursor: pointer; }
+.chip:hover { border-color: var(--muted); }
+.chip[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.chip:focus-visible, .range input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.range { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
+.range input { font: 13px var(--mono); color: var(--ink); background: var(--surface); border: 1px solid var(--line); padding: 4px 6px; }
+.period { font-size: 13px; color: var(--muted); margin-left: auto; }
+.period b { color: var(--ink); font-weight: 600; }
+
+/* Destaques */
+.awards { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+@media (max-width: 760px) { .awards { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.award { background: var(--surface); border: 1px solid var(--line); padding: 14px 16px; display: flex; flex-direction: column; gap: 2px; }
+.award .t { font-size: 11px; text-transform: uppercase; letter-spacing: .1em; color: var(--muted); }
+.award .who { font-family: var(--display); font-size: 20px; font-weight: 600; }
+.award .val { font-family: var(--mono); font-size: 13px; color: var(--accent); }
+
+/* Tabelas */
+.tablebox { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); }
+table { border-collapse: collapse; width: 100%; }
+.wide { min-width: 900px; }
+th, td { padding: 10px 12px; text-align: right; white-space: nowrap; }
+th:first-child, td:first-child { text-align: left; }
+thead th { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 600; border-bottom: 1px solid var(--line); }
+thead th button { all: unset; cursor: pointer; display: inline-flex; gap: 4px; align-items: center; }
+thead th button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+thead th.sorted button { color: var(--ink); }
+thead th.sorted button::after { content: "▼"; font-size: 8px; color: var(--accent); }
+thead th.sorted.asc button::after { content: "▲"; }
+tbody tr + tr td { border-top: 1px solid var(--row); }
+tbody td { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 14px; }
+tbody td:first-child { font-family: var(--body); font-weight: 600; font-size: 15px; }
+.me-tag { font-family: var(--mono); font-size: 10px; font-weight: 500; color: var(--accent); border: 1px solid var(--accent); padding: 0 4px; margin-left: 6px; vertical-align: 2px; }
+td.best { color: var(--accent); font-weight: 500; }
+td.pos { color: var(--win); } td.neg { color: var(--loss); }
+th.grp { border-left: 1px solid var(--line); }
+td.grp { border-left: 1px solid var(--row); }
+.legend { font-size: 12px; color: var(--muted); max-width: 80ch; }
+
+/* Mapas */
+.winbar { display: inline-block; width: 70px; height: 6px; background: var(--row); position: relative; vertical-align: middle; margin-right: 8px; }
+.winbar span { position: absolute; inset: 0 auto 0 0; background: var(--win); }
+td .who { font-family: var(--body); font-size: 13px; color: var(--muted); }
+td .who b { color: var(--ink); font-weight: 600; }
+
+/* Histórico */
+.days { display: flex; flex-direction: column; gap: 6px; }
+details.day { background: var(--surface); border: 1px solid var(--line); }
+details.day > summary { list-style: none; cursor: pointer; padding: 11px 14px; display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; gap: 14px; align-items: center; }
+details.day > summary::-webkit-details-marker { display: none; }
+details.day > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+details.day > summary::before { content: "▸"; color: var(--muted); font-size: 12px; transition: transform .15s; }
+details.day[open] > summary::before { transform: rotate(90deg); }
+details.day[open] > summary { border-bottom: 1px solid var(--line); }
+@media (prefers-reduced-motion: reduce) { details.day > summary::before { transition: none; } }
+.dayhead .d { font-family: var(--display); font-weight: 600; font-size: 16px; }
+.dayhead .maps { font-size: 13px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dayhead .r { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+.dayhead .r b { font-weight: 500; }
+.dayhead .r .w { color: var(--win); } .dayhead .r .l { color: var(--loss); }
+.dots { display: flex; gap: 3px; }
+.dots span { width: 8px; height: 8px; border-radius: 50%; background: var(--loss); }
+.dots span.w { background: var(--win); }
+@media (max-width: 560px) { .dayhead .maps, .dots { display: none; } details.day > summary { grid-template-columns: auto minmax(0, 1fr) auto; } }
+.daybody { padding: 10px; display: flex; flex-direction: column; gap: 8px; }
+details.match { background: var(--surface); border: 1px solid var(--line); border-left: 4px solid var(--line); }
+details.match.won { border-left-color: var(--win); }
+details.match.lost { border-left-color: var(--loss); }
+details.match summary { list-style: none; cursor: pointer; padding: 12px 14px; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 14px; align-items: center; }
+details.match summary::-webkit-details-marker { display: none; }
+details.match summary:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.score { font-family: var(--display); font-size: 22px; font-weight: 700; line-height: 1; }
+.won .score { color: var(--win); } .lost .score { color: var(--loss); }
+.minfo { min-width: 0; }
+.minfo .top { font-weight: 600; }
+.minfo .sub { font-size: 13px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mvp { font-size: 12px; text-align: right; color: var(--muted); }
+.mvp b { display: block; font-family: var(--display); font-size: 15px; color: var(--accent); }
+.mbody { padding: 0 14px 14px; display: flex; flex-direction: column; gap: 8px; }
+.mbody table { min-width: 600px; }
+.mbody .tablebox { border: none; background: transparent; }
+.mbody a { color: var(--ct); font-size: 13px; }
+
+.empty { background: var(--surface); border: 1px dashed var(--line); padding: 28px 20px; text-align: center; color: var(--muted); }
+.empty b { color: var(--ink); display: block; font-family: var(--display); font-size: 18px; margin-bottom: 4px; }
+footer { font-size: 13px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 14px; }
+footer code { font-family: var(--mono); color: var(--ink); }
+</style>
+</head>
+<body>
+
+
+<div class="wrap">
+  <header class="head">
+    <div>
+      <div class="eyebrow">Gamers Club · CS2 · partidas em stack</div>
+      <h1>Stack do TomPz</h1>
+      <div class="roster" id="roster"></div>
+    </div>
+    <div class="record" id="record" aria-live="polite"></div>
+  </header>
+
+  <div class="filter" role="group" aria-label="Período">
+    <div class="chips" id="chips"></div>
+    <div class="range">
+      <label for="from">De</label><input type="date" id="from">
+      <label for="to">até</label><input type="date" id="to">
+    </div>
+    <div class="period" id="period"></div>
+  </div>
+
+  <section class="section" id="awardsSec" hidden>
+    <h2>Destaques do período</h2>
+    <div class="awards" id="awards"></div>
+  </section>
+
+  <section class="section">
+    <h2>Stats por jogador</h2>
+    <div id="boardWrap"></div>
+    <div class="legend">Somas e médias só das partidas do período. P = partidas · V% = vitórias · DIF = kills menos deaths · ADR = dano médio por round · HS% = kills de headshot · KAST = % de rounds com kill, assist, sobrevivência ou trade · FK = first kills · 3K+ = rounds com 3 ou mais kills · RP = pontos de rating ganhos ou perdidos. Clique numa coluna para ordenar; o melhor valor de cada coluna fica em destaque.</div>
+  </section>
+
+  <section class="section">
+    <h2>Mapas</h2>
+    <div id="mapsWrap"></div>
+  </section>
+
+  <section class="section">
+    <h2>Histórico</h2>
+    <div class="days" id="days"></div>
+  </section>
+
+  <footer>Stats tirados das partidas da Gamers Club jogadas pelo stack. Cada partida é contada uma única vez, mesmo que o link seja enviado repetido.</footer>
+</div>
+
+<script>
+const SQUAD = [
+  { id: "251985", nick: "TomPz", me: true },
+  { id: "1035547", nick: "xTheHoSt" },
+  { id: "1852904", nick: "Markin" },
+  { id: "392073", nick: "Keke" },
+  { id: "1189694", nick: "J.Rocha" }
+];
+const MAP_NAMES = { de_inferno: "Inferno", de_mirage: "Mirage", de_nuke: "Nuke", de_ancient: "Ancient", de_anubis: "Anubis", de_dust2: "Dust II", de_train: "Train", de_vertigo: "Vertigo", de_overpass: "Overpass" };
+const mapName = m => MAP_NAMES[m] || (m || "?").replace(/^de_/, "").replace(/^./, c => c.toUpperCase());
+const WEEKDAYS = ["dom", "seg", "ter", "qua", "qui", "sex", "sáb"];
+
+const COLS = [
+  { key: "nick", label: "Jogador", fmt: v => v },
+  { key: "matches", label: "P", fmt: v => v },
+  { key: "winPct", label: "V%", fmt: v => v.toFixed(0) },
+  { key: "rounds", label: "Rounds", fmt: v => v },
+  { key: "k", label: "K", fmt: v => v, grp: true },
+  { key: "d", label: "D", fmt: v => v, lowBest: true },
+  { key: "a", label: "A", fmt: v => v },
+  { key: "dif", label: "DIF", fmt: v => (v > 0 ? "+" : "") + v, signed: true },
+  { key: "kdr", label: "K/D", fmt: v => v.toFixed(2), grp: true },
+  { key: "kpr", label: "K/R", fmt: v => v.toFixed(2) },
+  { key: "adr", label: "ADR", fmt: v => v.toFixed(1) },
+  { key: "hsPct", label: "HS%", fmt: v => v.toFixed(0) },
+  { key: "kastPct", label: "KAST", fmt: v => v.toFixed(0) + "%" },
+  { key: "dmg", label: "Dano", fmt: v => v.toLocaleString("pt-BR"), grp: true },
+  { key: "fk", label: "FK", fmt: v => v },
+  { key: "mk3", label: "3K+", fmt: v => v },
+  { key: "clutch", label: "Clutch", fmt: v => v },
+  { key: "rp", label: "RP", fmt: v => (v > 0 ? "+" : "") + v, signed: true }
+];
+const PRESETS = [
+  { id: "today", label: "Hoje" },
+  { id: "yesterday", label: "Ontem" },
+  { id: "7d", label: "7 dias" },
+  { id: "30d", label: "30 dias" },
+  { id: "month", label: "Este mês" },
+  { id: "all", label: "Tudo" }
+];
+
+let sortKey = "adr", sortAsc = false, allMatches = [], preset = "all";
+const openDays = new Set();
+const fromEl = document.getElementById("from"), toEl = document.getElementById("to");
+
+const el = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; };
+const n = v => Number(v) || 0;
+const pad = x => String(x).padStart(2, "0");
+const iso = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const dayOf = m => String(m.date || "").slice(0, 10);
+const brDate = s => s ? `${s.slice(8, 10)}/${s.slice(5, 7)}/${s.slice(0, 4)}` : "";
+
+function presetRange(id) {
+  const t = new Date(); t.setHours(12);
+  const shift = k => { const d = new Date(t); d.setDate(d.getDate() + k); return iso(d); };
+  switch (id) {
+    case "today": return [iso(t), iso(t)];
+    case "yesterday": return [shift(-1), shift(-1)];
+    case "7d": return [shift(-6), iso(t)];
+    case "30d": return [shift(-29), iso(t)];
+    case "month": return [`${t.getFullYear()}-${pad(t.getMonth() + 1)}-01`, iso(t)];
+    default: return ["", ""];
+  }
+}
+function filtered() {
+  const f = fromEl.value, to = toEl.value;
+  return allMatches.filter(m => { const d = dayOf(m); return (!f || d >= f) && (!to || d <= to); });
+}
+
+function aggregate(matches) {
+  const by = {};
+  SQUAD.forEach(p => by[p.id] = { id: p.id, nick: p.nick, me: !!p.me, matches: 0, wins: 0, k: 0, d: 0, a: 0, hs: 0, dmg: 0, rounds: 0, kastRounds: 0, fk: 0, mk3: 0, clutch: 0, rp: 0 });
+  for (const m of matches) for (const p of (m.players || [])) {
+    const s = by[p.id]; if (!s) continue;
+    s.matches++; if (m.win) s.wins++;
+    s.k += n(p.k); s.d += n(p.d); s.a += n(p.a); s.hs += n(p.hs); s.dmg += n(p.dmg);
+    s.rounds += n(p.rounds); s.kastRounds += n(p.kastRounds); s.fk += n(p.fk);
+    s.mk3 += n(p.mk3) + n(p.mk4) + n(p.mk5); s.clutch += n(p.clutch); s.rp += n(p.rp);
+  }
+  return Object.values(by).map(withRates);
+}
+function withRates(s) {
+  return {
+    ...s,
+    dif: s.k - s.d,
+    winPct: s.matches ? 100 * s.wins / s.matches : 0,
+    kdr: s.d ? s.k / s.d : s.k,
+    kpr: s.rounds ? s.k / s.rounds : 0,
+    adr: s.rounds ? s.dmg / s.rounds : 0,
+    hsPct: s.k ? 100 * s.hs / s.k : 0,
+    kastPct: s.rounds ? 100 * s.kastRounds / s.rounds : 0
+  };
+}
+
+function renderRoster() {
+  const r = document.getElementById("roster");
+  SQUAD.forEach((p, i) => { if (i) r.append(" · "); r.append(el("b", null, p.nick)); });
+}
+function renderChips() {
+  const box = document.getElementById("chips");
+  box.replaceChildren(...PRESETS.map(p => {
+    const b = el("button", "chip", p.label); b.type = "button"; b.id = "chip-" + p.id;
+    b.setAttribute("aria-pressed", String(preset === p.id));
+    b.addEventListener("click", () => { preset = p.id; const [f, t] = presetRange(p.id); fromEl.value = f; toEl.value = t; renderChips(); render(); });
+    return b;
+  }));
+}
+[fromEl, toEl].forEach(i => i.addEventListener("change", () => { preset = ""; renderChips(); render(); }));
+
+function renderPeriod(matches) {
+  const box = document.getElementById("period");
+  const f = fromEl.value, t = toEl.value;
+  let label;
+  if (!f && !t) label = "Todo o histórico";
+  else if (f === t) label = brDate(f);
+  else label = `${f ? brDate(f) : "início"} a ${t ? brDate(t) : "hoje"}`;
+  box.replaceChildren(el("b", null, label), ` · ${matches.length} ${matches.length === 1 ? "partida" : "partidas"}`);
+}
+
+function renderRecord(matches) {
+  const box = document.getElementById("record");
+  const w = matches.filter(m => m.win).length, l = matches.length - w;
+  const pct = matches.length ? Math.round(100 * w / matches.length) + "%" : "–";
+  const items = [[w, "Vitórias", "w"], [l, "Derrotas", "ls"], [pct, "Aproveit.", ""], [matches.length, "Partidas", ""]];
+  box.replaceChildren(...items.map(([v, l2, c]) => { const d = el("div"); d.append(el("span", "v " + c, String(v)), el("span", "l", l2)); return d; }));
+}
+
+function renderAwards(stats) {
+  const sec = document.getElementById("awardsSec"), box = document.getElementById("awards");
+  const played = stats.filter(s => s.matches);
+  sec.hidden = !played.length;
+  if (!played.length) return;
+  const top = key => played.slice().sort((a, b) => b[key] - a[key])[0];
+  const awards = [
+    ["Mais dano", top("adr"), s => s.adr.toFixed(1) + " ADR"],
+    ["Melhor K/D", top("kdr"), s => s.kdr.toFixed(2) + " K/D"],
+    ["Mira mais limpa", top("hsPct"), s => s.hsPct.toFixed(0) + "% HS"],
+    ["Mais constante", top("kastPct"), s => s.kastPct.toFixed(0) + "% KAST"]
+  ];
+  box.replaceChildren(...awards.map(([t, s, f]) => { const d = el("div", "award"); d.append(el("span", "t", t), el("span", "who", s.nick), el("span", "val", f(s))); return d; }));
+}
+
+function statTable(rows, cols, opts = {}) {
+  const box = el("div", "tablebox");
+  const t = el("table", opts.wide ? "wide" : null), thead = el("thead"), tr = el("tr");
+  const played = rows.filter(r => r.matches !== 0);
+  const best = {};
+  cols.forEach(c => {
+    if (c.key === "nick" || played.length < 2) return;
+    const vals = played.map(r => r[c.key]);
+    best[c.key] = c.lowBest ? Math.min(...vals) : Math.max(...vals);
+  });
+  cols.forEach(c => {
+    const th = el("th"); if (c.grp) th.classList.add("grp");
+    if (opts.sortable) {
+      const b = el("button", null, c.label); b.type = "button";
+      b.addEventListener("click", () => { if (sortKey === c.key) sortAsc = !sortAsc; else { sortKey = c.key; sortAsc = c.key === "nick" || !!c.lowBest; } render(); });
+      th.append(b);
+      if (sortKey === c.key) { th.classList.add("sorted"); if (sortAsc) th.classList.add("asc"); }
+      th.setAttribute("aria-sort", sortKey === c.key ? (sortAsc ? "ascending" : "descending") : "none");
+    } else th.textContent = c.label;
+    tr.append(th);
+  });
+  thead.append(tr); t.append(thead);
+  const tb = el("tbody");
+  rows.forEach(r => {
+    const row = el("tr");
+    cols.forEach(c => {
+      const td = el("td"); if (c.grp) td.classList.add("grp");
+      if (c.key === "nick") { td.textContent = r.nick; if (r.me) td.append(el("span", "me-tag", "você")); }
+      else if (r.matches === 0) td.textContent = "–";
+      else {
+        td.textContent = c.fmt(r[c.key]);
+        if (c.key in best && r[c.key] === best[c.key]) td.classList.add("best");
+        if (c.signed && r[c.key]) td.classList.add(r[c.key] > 0 ? "pos" : "neg");
+      }
+      row.append(td);
+    });
+    tb.append(row);
+  });
+  t.append(tb); box.append(t);
+  return box;
+}
+
+function emptyBox(title, text) { const e = el("div", "empty"); e.append(el("b", null, title), text); return e; }
+
+function renderBoard(stats, matches) {
+  const wrap = document.getElementById("boardWrap");
+  if (!allMatches.length) { wrap.replaceChildren(emptyBox("Nenhuma partida registrada ainda", "Assim que uma partida do stack for adicionada, os stats de cada jogador aparecem aqui.")); return; }
+  if (!matches.length) { wrap.replaceChildren(emptyBox("Nenhuma partida neste período", "Escolha outro período no filtro acima.")); return; }
+  const rows = stats.slice().sort((a, b) => {
+    if (!a.matches !== !b.matches) return a.matches ? -1 : 1;
+    const va = a[sortKey], vb = b[sortKey];
+    const c = typeof va === "string" ? va.localeCompare(vb) : va - vb;
+    return sortAsc ? c : -c;
+  });
+  wrap.replaceChildren(statTable(rows, COLS, { sortable: true, wide: true }));
+}
+
+function renderMaps(matches) {
+  const wrap = document.getElementById("mapsWrap");
+  if (!matches.length) { wrap.replaceChildren(el("div", "legend", "Os mapas jogados no período aparecem aqui.")); return; }
+  const by = {};
+  matches.forEach(m => {
+    const r = by[m.map] = by[m.map] || { map: m.map, w: 0, l: 0, rw: 0, rl: 0, list: [] };
+    m.win ? r.w++ : r.l++; r.rw += n(m.score?.[0]); r.rl += n(m.score?.[1]); r.list.push(m);
+  });
+  const rows = Object.values(by).sort((a, b) => (b.w + b.l) - (a.w + a.l) || (b.w / (b.w + b.l)) - (a.w / (a.w + a.l)));
+  const box = el("div", "tablebox"), t = el("table"); t.style.minWidth = "720px";
+  const thead = el("thead"), htr = el("tr");
+  ["Mapa", "Partidas", "V", "D", "% de vitória", "Rounds", "Melhor ADR no mapa", "Melhor K/D no mapa"].forEach(h => htr.append(el("th", null, h)));
+  thead.append(htr); t.append(thead);
+  const tb = el("tbody");
+  rows.forEach(r => {
+    const tr = el("tr"), total = r.w + r.l, pct = 100 * r.w / total;
+    const st = aggregate(r.list).filter(s => s.matches);
+    const bestBy = key => st.slice().sort((a, b) => b[key] - a[key])[0];
+    const ba = bestBy("adr"), bk = bestBy("kdr");
+    const pctTd = el("td"); const bar = el("span", "winbar"); const fill = el("span"); fill.style.width = pct + "%"; bar.append(fill);
+    pctTd.append(bar, pct.toFixed(0) + "%");
+    const who = (s, txt) => { const td = el("td"); if (s) { const w = el("span", "who"); w.append(el("b", null, s.nick), " " + txt); td.append(w); } else td.textContent = "–"; return td; };
+    tr.append(el("td", null, mapName(r.map)), el("td", null, String(total)), el("td", "pos", String(r.w)), el("td", "neg", String(r.l)), pctTd,
+      el("td", null, `${r.rw}–${r.rl}`), who(ba, ba ? ba.adr.toFixed(1) : ""), who(bk, bk ? bk.kdr.toFixed(2) : ""));
+    tb.append(tr);
+  });
+  t.append(tb); box.append(t);
+  wrap.replaceChildren(box);
+}
+
+function matchCard(m) {
+  const d = el("details", "match " + (m.win ? "won" : "lost"));
+  const s = el("summary");
+  const sc = el("span", "score num", `${n(m.score?.[0])}:${n(m.score?.[1])}`);
+  const info = el("div", "minfo");
+  const hour = String(m.date || "").slice(11, 16);
+  info.append(el("div", "top", `${mapName(m.map)} · ${m.win ? "Vitória" : "Derrota"}`), el("div", "sub", `${hour} · vs ${m.opponent || "?"}`));
+  const ps = (m.players || []).map(p => withRates({ ...p, matches: 1, wins: m.win ? 1 : 0, me: SQUAD.find(q => q.id === p.id)?.me, k: n(p.k), d: n(p.d), a: n(p.a), hs: n(p.hs), dmg: n(p.dmg), rounds: n(p.rounds), kastRounds: n(p.kastRounds), fk: n(p.fk), mk3: n(p.mk3) + n(p.mk4) + n(p.mk5), clutch: n(p.clutch), rp: n(p.rp) }));
+  const mvp = ps.slice().sort((a, b) => b.adr - a.adr)[0];
+  const mv = el("div", "mvp"); if (mvp) { mv.append("MVP"); mv.append(el("b", null, mvp.nick)); }
+  s.append(sc, info, mv); d.append(s);
+  const body = el("div", "mbody");
+  const mCols = ["nick", "k", "d", "a", "dif", "kdr", "adr", "hsPct", "kastPct", "fk", "mk3", "rp"].map(k => ({ ...COLS.find(c => c.key === k), grp: false }));
+  body.append(statTable(ps.sort((a, b) => b.adr - a.adr), mCols));
+  if (m.link) { const a = el("a", null, "Abrir partida na Gamers Club ↗"); a.href = m.link; a.target = "_blank"; a.rel = "noopener"; body.append(a); }
+  d.append(body);
+  return d;
+}
+
+function renderDays(matches) {
+  const box = document.getElementById("days");
+  if (!matches.length) { box.replaceChildren(el("div", "legend", "As partidas do período aparecem aqui, agrupadas por dia. Clique num dia para ver as partidas.")); return; }
+  const groups = new Map();
+  matches.forEach(m => { const k = dayOf(m); if (!groups.has(k)) groups.set(k, []); groups.get(k).push(m); });
+  box.replaceChildren(...[...groups.entries()].map(([day, list]) => {
+    const g = el("details", "day"), s = el("summary", "dayhead");
+    const wd = WEEKDAYS[new Date(day + "T12:00").getDay()] || "";
+    const w = list.filter(m => m.win).length;
+    const maps = [...new Set(list.map(m => mapName(m.map)))].join(", ");
+    const dots = el("span", "dots");
+    list.slice().reverse().forEach(m => { const d = el("span", m.win ? "w" : ""); dots.append(d); });
+    dots.setAttribute("aria-hidden", "true");
+    const r = el("span", "r");
+    r.append(`${list.length} ${list.length === 1 ? "partida" : "partidas"} · `, el("b", "w", `${w}V`), " ", el("b", "l", `${list.length - w}D`));
+    s.append(el("span", "d", `${brDate(day)} · ${wd}`), el("span", "maps", maps), dots, r);
+    g.append(s);
+    const body = el("div", "daybody");
+    g.append(body);
+    const fill = () => { if (!body.childElementCount) body.append(...list.map(matchCard)); };
+    if (openDays.has(day)) { g.open = true; fill(); }
+    g.addEventListener("toggle", () => { if (g.open) { openDays.add(day); fill(); } else openDays.delete(day); });
+    return g;
+  }));
+}
+
+function render() {
+  const matches = filtered();
+  const stats = aggregate(matches);
+  renderPeriod(matches);
+  renderRecord(matches);
+  renderAwards(stats);
+  renderBoard(stats, matches);
+  renderMaps(matches);
+  renderDays(matches);
+}
+
+// Cópia dos dados embutida na página, para quem abre o link sem estar logado.
+const SNAPSHOT = [{"date":"2026-10-02T23:05","dateLabel":"02/10/2026 23:05","duration":"50 Minutes","id":"27997264","link":"https://gamersclub.com.br/lobby/match/27997264","map":"de_inferno","opponent":"Team ZANGADO GAMES","players":[{"a":4,"clutch":0,"d":15,"dmg":2359,"fk":2,"flash":2,"hs":11,"id":"251985","k":20,"kastRounds":19,"level":16,"mk2":2,"mk3":1,"mk4":0,"mk5":0,"nick":"TomPz","rounds":24,"rp":14},{"a":5,"clutch":0,"d":19,"dmg":1991,"fk":4,"flash":2,"hs":15,"id":"1035547","k":21,"kastRounds":14,"level":12,"mk2":5,"mk3":2,"mk4":0,"mk5":0,"nick":"xTheHoSt","rounds":24,"rp":15},{"a":5,"clutch":0,"d":14,"dmg":2031,"fk":2,"flash":0,"hs":4,"id":"1852904","k":17,"kastRounds":15,"level":13,"mk2":3,"mk3":1,"mk4":0,"mk5":0,"nick":"Markin","rounds":24,"rp":13},{"a":8,"clutch":0,"d":19,"dmg":1857,"fk":0,"flash":0,"hs":9,"id":"392073","k":16,"kastRounds":14,"level":15,"mk2":4,"mk3":1,"mk4":0,"mk5":0,"nick":"Keke","rounds":24,"rp":11},{"a":7,"clutch":0,"d":17,"dmg":1462,"fk":3,"flash":1,"hs":10,"id":"1189694","k":15,"kastRounds":18,"level":16,"mk2":3,"mk3":0,"mk4":0,"mk5":0,"nick":"J.Rocha","rounds":24,"rp":11}],"score":[13,11],"win":true},{"date":"2026-10-02T22:24","dateLabel":"02/10/2026 22:24","duration":"38 Minutes","id":"27996717","link":"https://gamersclub.com.br/lobby/match/27996717","map":"de_nuke","opponent":"Team Slayer","players":[{"a":2,"clutch":0,"d":13,"dmg":1649,"fk":5,"flash":0,"hs":8,"id":"251985","k":17,"kastRounds":14,"level":16,"mk2":1,"mk3":1,"mk4":1,"mk5":0,"nick":"TomPz","rounds":22,"rp":14},{"a":7,"clutch":0,"d":13,"dmg":1399,"fk":2,"flash":0,"hs":4,"id":"1035547","k":11,"kastRounds":13,"level":12,"mk2":0,"mk3":1,"mk4":0,"mk5":0,"nick":"xTheHoSt","rounds":22,"rp":14},{"a":3,"clutch":0,"d":10,"dmg":1901,"fk":2,"flash":0,"hs":9,"id":"1852904","k":20,"kastRounds":17,"level":13,"mk2":3,"mk3":0,"mk4":1,"mk5":0,"nick":"Markin","rounds":22,"rp":18},{"a":5,"clutch":0,"d":15,"dmg":1842,"fk":2,"flash":2,"hs":7,"id":"392073","k":17,"kastRounds":15,"level":15,"mk2":4,"mk3":1,"mk4":0,"mk5":0,"nick":"Keke","rounds":22,"rp":15},{"a":5,"clutch":0,"d":14,"dmg":1567,"fk":2,"flash":0,"hs":8,"id":"1189694","k":14,"kastRounds":15,"level":16,"mk2":2,"mk3":0,"mk4":0,"mk5":0,"nick":"J.Rocha","rounds":22,"rp":12}],"score":[13,9],"win":true},{"date":"2026-10-02T21:46","dateLabel":"02/10/2026 21:46","duration":"36 Minutes","id":"27996282","link":"https://gamersclub.com.br/lobby/match/27996282","map":"de_inferno","opponent":"Team branc","players":[{"a":4,"clutch":0,"d":14,"dmg":1684,"fk":1,"flash":0,"hs":8,"id":"251985","k":15,"kastRounds":14,"level":16,"mk2":3,"mk3":0,"mk4":1,"mk5":0,"nick":"TomPz","rounds":19,"rp":-7},{"a":2,"clutch":0,"d":16,"dmg":1117,"fk":1,"flash":0,"hs":4,"id":"1035547","k":11,"kastRounds":10,"level":12,"mk2":2,"mk3":1,"mk4":0,"mk5":0,"nick":"xTheHoSt","rounds":19,"rp":-14},{"a":8,"clutch":0,"d":17,"dmg":1221,"fk":2,"flash":0,"hs":3,"id":"1852904","k":7,"kastRounds":11,"level":13,"mk2":0,"mk3":0,"mk4":0,"mk5":0,"nick":"Markin","rounds":19,"rp":-12},{"a":5,"clutch":0,"d":16,"dmg":1167,"fk":1,"flash":0,"hs":5,"id":"1189694","k":8,"kastRounds":12,"level":16,"mk2":1,"mk3":0,"mk4":0,"mk5":0,"nick":"J.Rocha","rounds":19,"rp":-13}],"score":[6,13],"win":false},{"date":"2026-10-02T20:34","dateLabel":"02/10/2026 20:34","duration":"57 Minutes","id":"27995589","link":"https://gamersclub.com.br/lobby/match/27995589","map":"de_overpass","opponent":"Team r1ck","players":[{"a":4,"clutch":0,"d":13,"dmg":1874,"fk":0,"flash":1,"hs":7,"id":"1035547","k":16,"kastRounds":18,"level":12,"mk2":1,"mk3":0,"mk4":0,"mk5":0,"nick":"xTheHoSt","rounds":23,"rp":13},{"a":3,"clutch":0,"d":12,"dmg":2691,"fk":2,"flash":1,"hs":5,"id":"1852904","k":29,"kastRounds":18,"level":13,"mk2":8,"mk3":1,"mk4":0,"mk5":0,"nick":"Markin","rounds":23,"rp":18},{"a":7,"clutch":0,"d":14,"dmg":1521,"fk":2,"flash":1,"hs":5,"id":"392073","k":13,"kastRounds":16,"level":15,"mk2":0,"mk3":1,"mk4":1,"mk5":0,"nick":"Keke","rounds":23,"rp":12},{"a":5,"clutch":0,"d":17,"dmg":1794,"fk":4,"flash":0,"hs":6,"id":"1189694","k":18,"kastRounds":16,"level":16,"mk2":6,"mk3":0,"mk4":0,"mk5":0,"nick":"J.Rocha","rounds":23,"rp":12}],"score":[13,10],"win":true},{"date":"2026-10-02T19:51","dateLabel":"02/10/2026 19:51","duration":"40 Minutes","id":"27995246","link":"https://gamersclub.com.br/lobby/match/27995246","map":"de_mirage","opponent":"Team r1ck","players":[{"a":1,"clutch":0,"d":13,"dmg":1859,"fk":1,"flash":1,"hs":6,"id":"251985","k":17,"kastRounds":13,"level":16,"mk2":2,"mk3":2,"mk4":0,"mk5":0,"nick":"TomPz","rounds":22,"rp":-9},{"a":4,"clutch":0,"d":19,"dmg":1837,"fk":1,"flash":1,"hs":4,"id":"1035547","k":14,"kastRounds":10,"level":12,"mk2":4,"mk3":0,"mk4":0,"mk5":0,"nick":"xTheHoSt","rounds":22,"rp":-13},{"a":0,"clutch":0,"d":15,"dmg":1208,"fk":7,"flash":0,"hs":8,"id":"1852904","k":14,"kastRounds":11,"level":13,"mk2":4,"mk3":0,"mk4":0,"mk5":0,"nick":"Markin","rounds":22,"rp":-16},{"a":3,"clutch":0,"d":15,"dmg":1244,"fk":1,"flash":1,"hs":7,"id":"392073","k":14,"kastRounds":13,"level":15,"mk2":3,"mk3":0,"mk4":0,"mk5":0,"nick":"Keke","rounds":22,"rp":-14},{"a":6,"clutch":0,"d":18,"dmg":1347,"fk":2,"flash":1,"hs":3,"id":"1189694","k":11,"kastRounds":13,"level":16,"mk2":1,"mk3":1,"mk4":0,"mk5":0,"nick":"J.Rocha","rounds":22,"rp":-14}],"score":[9,13],"win":false},{"date":"2026-10-01T20:21","dateLabel":"01/10/2026 20:21","duration":"41 Minutes","id":"27989019","link":"https://gamersclub.com.br/lobby/match/27989019","map":"de_mirage","opponent":"Team LordPTK","players":[{"a":5,"clutch":0,"d":17,"dmg":2051,"fk":3,"flash":1,"hs":9,"id":"251985","k":22,"kastRounds":14,"level":16,"mk2":6,"mk3":0,"mk4":1,"mk5":0,"nick":"TomPz","rounds":21,"rp":-8},{"a":6,"clutch":0,"d":15,"dmg":1843,"fk":0,"flash":0,"hs":6,"id":"1035547","k":17,"kastRounds":14,"level":12,"mk2":4,"mk3":2,"mk4":0,"mk5":0,"nick":"xTheHoSt","rounds":19,"rp":-10},{"a":4,"clutch":0,"d":15,"dmg":1515,"fk":5,"flash":0,"hs":10,"id":"1852904","k":18,"kastRounds":15,"level":13,"mk2":2,"mk3":2,"mk4":0,"mk5":0,"nick":"Markin","rounds":21,"rp":-10},{"a":3,"clutch":0,"d":18,"dmg":1369,"fk":2,"flash":0,"hs":6,"id":"392073","k":11,"kastRounds":10,"level":15,"mk2":2,"mk3":0,"mk4":0,"mk5":0,"nick":"Keke","rounds":19,"rp":-18},{"a":3,"clutch":0,"d":17,"dmg":947,"fk":3,"flash":0,"hs":3,"id":"1189694","k":6,"kastRounds":11,"level":16,"mk2":0,"mk3":0,"mk4":0,"mk5":0,"nick":"J.Rocha","rounds":20,"rp":-19}],"score":[8,13],"win":false},{"date":"2026-10-01T19:29","dateLabel":"01/10/2026 19:29","duration":"46 Minutes","id":"27988503","link":"https://gamersclub.com.br/lobby/match/27988503","map":"de_inferno","opponent":"Team t.tv / bixiigaa","players":[{"a":9,"clutch":0,"d":14,"dmg":1885,"fk":0,"flash":1,"hs":9,"id":"251985","k":14,"kastRounds":16,"level":16,"mk2":1,"mk3":2,"mk4":0,"mk5":0,"nick":"TomPz","rounds":23,"rp":-13},{"a":5,"clutch":0,"d":17,"dmg":1789,"fk":3,"flash":0,"hs":8,"id":"1035547","k":17,"kastRounds":14,"level":12,"mk2":2,"mk3":2,"mk4":0,"mk5":0,"nick":"xTheHoSt","rounds":23,"rp":-15},{"a":7,"clutch":0,"d":19,"dmg":1604,"fk":2,"flash":0,"hs":5,"id":"392073","k":15,"kastRounds":15,"level":15,"mk2":1,"mk3":1,"mk4":0,"mk5":0,"nick":"Keke","rounds":23,"rp":-19},{"a":6,"clutch":0,"d":16,"dmg":2452,"fk":2,"flash":1,"hs":12,"id":"1189694","k":24,"kastRounds":19,"level":16,"mk2":3,"mk3":1,"mk4":0,"mk5":1,"nick":"J.Rocha","rounds":23,"rp":-8}],"score":[10,13],"win":false},{"date":"2026-09-30T21:21","dateLabel":"30/09/2026 21:21","duration":"44 Minutes","id":"27983202","link":"https://gamersclub.com.br/lobby/match/27983202","map":"de_cache","opponent":"Team TR1p4","players":[{"a":3,"clutch":0,"d":13,"dmg":2468,"fk":1,"flash":0,"hs":5,"id":"251985","k":27,"kastRounds":16,"level":16,"mk2":6,"mk3":4,"mk4":0,"mk5":0,"nick":"TomPz","rounds":23,"rp":-8},{"a":7,"clutch":0,"d":18,"dmg":1293,"fk":1,"flash":1,"hs":3,"id":"1035547","k":6,"kastRounds":11,"level":12,"mk2":1,"mk3":0,"mk4":0,"mk5":0,"nick":"xTheHoSt","rounds":23,"rp":-15},{"a":5,"clutch":0,"d":18,"dmg":1710,"fk":2,"flash":0,"hs":10,"id":"1852904","k":15,"kastRounds":11,"level":14,"mk2":0,"mk3":2,"mk4":1,"mk5":0,"nick":"Markin","rounds":23,"rp":-11},{"a":2,"clutch":0,"d":19,"dmg":1176,"fk":3,"flash":0,"hs":4,"id":"392073","k":11,"kastRounds":10,"level":15,"mk2":2,"mk3":0,"mk4":0,"mk5":0,"nick":"Keke","rounds":23,"rp":-18},{"a":5,"clutch":0,"d":17,"dmg":1568,"fk":0,"flash":0,"hs":10,"id":"1189694","k":15,"kastRounds":13,"level":16,"mk2":2,"mk3":2,"mk4":0,"mk5":0,"nick":"J.Rocha","rounds":23,"rp":-13}],"score":[10,13],"win":false},{"date":"2026-09-30T20:38","dateLabel":"30/09/2026 20:38","duration":"39 Minutes","id":"27982584","link":"https://gamersclub.com.br/lobby/match/27982584","map":"de_inferno","opponent":"Team felipe_xax1m DASANTIGAS","players":[{"a":9,"clutch":0,"d":13,"dmg":1401,"fk":0,"flash":4,"hs":10,"id":"251985","k":12,"kastRounds":14,"level":16,"mk2":4,"mk3":0,"mk4":0,"mk5":0,"nick":"TomPz","rounds":22,"rp":10},{"a":7,"clutch":0,"d":18,"dmg":1523,"fk":2,"flash":3,"hs":4,"id":"1035547","k":12,"kastRounds":14,"level":12,"mk2":2,"mk3":0,"mk4":0,"mk5":0,"nick":"xTheHoSt","rounds":22,"rp":12},{"a":3,"clutch":0,"d":14,"dmg":2140,"fk":1,"flash":0,"hs":8,"id":"1852904","k":19,"kastRounds":14,"level":13,"mk2":7,"mk3":0,"mk4":0,"mk5":0,"nick":"Markin","rounds":22,"rp":13},{"a":3,"clutch":0,"d":15,"dmg":1789,"fk":4,"flash":0,"hs":4,"id":"392073","k":17,"kastRounds":13,"level":15,"mk2":2,"mk3":2,"mk4":0,"mk5":0,"nick":"Keke","rounds":22,"rp":12},{"a":3,"clutch":0,"d":16,"dmg":1929,"fk":4,"flash":0,"hs":13,"id":"1189694","k":20,"kastRounds":14,"level":16,"mk2":6,"mk3":1,"mk4":0,"mk5":0,"nick":"J.Rocha","rounds":22,"rp":13}],"score":[13,9],"win":true},{"date":"2026-09-30T19:31","dateLabel":"30/09/2026 19:31","duration":"33 Minutes","id":"27982262","link":"https://gamersclub.com.br/lobby/match/27982262","map":"de_mirage","opponent":"Team ContiZerA","players":[{"a":6,"clutch":0,"d":10,"dmg":1707,"fk":2,"flash":0,"hs":6,"id":"1035547","k":13,"kastRounds":12,"level":12,"mk2":0,"mk3":1,"mk4":0,"mk5":0,"nick":"xTheHoSt","rounds":16,"rp":15},{"a":5,"clutch":0,"d":13,"dmg":1464,"fk":1,"flash":0,"hs":8,"id":"251985","k":14,"kastRounds":13,"level":16,"mk2":4,"mk3":0,"mk4":0,"mk5":0,"nick":"TomPz","rounds":16,"rp":12},{"a":6,"clutch":0,"d":6,"dmg":1364,"fk":3,"flash":1,"hs":4,"id":"1852904","k":12,"kastRounds":14,"level":13,"mk2":0,"mk3":1,"mk4":0,"mk5":0,"nick":"Markin","rounds":16,"rp":17},{"a":7,"clutch":0,"d":8,"dmg":1081,"fk":2,"flash":0,"hs":4,"id":"392073","k":11,"kastRounds":12,"level":15,"mk2":2,"mk3":0,"mk4":0,"mk5":0,"nick":"Keke","rounds":16,"rp":12}],"score":[13,3],"win":true},{"date":"2026-09-29T21:15","dateLabel":"29/09/2026 21:15","duration":"55 Minutes","id":"27976947","link":"https://gamersclub.com.br/lobby/match/27976947","map":"de_mirage","opponent":"Team kotaro -.-","players":[{"a":4,"clutch":0,"d":20,"dmg":1731,"fk":2,"flash":1,"hs":10,"id":"251985","k":16,"kastRounds":19,"level":16,"mk2":2,"mk3":0,"mk4":0,"mk5":0,"nick":"TomPz","rounds":30,"rp":-15},{"a":13,"clutch":0,"d":26,"dmg":2752,"fk":4,"flash":1,"hs":9,"id":"1035547","k":20,"kastRounds":19,"level":12,"mk2":1,"mk3":2,"mk4":0,"mk5":0,"nick":"xTheHoSt","rounds":30,"rp":-8},{"a":2,"clutch":0,"d":21,"dmg":1931,"fk":3,"flash":0,"hs":7,"id":"1852904","k":24,"kastRounds":20,"level":13,"mk2":2,"mk3":2,"mk4":0,"mk5":0,"nick":"Markin","rounds":30,"rp":-9},{"a":6,"clutch":0,"d":26,"dmg":1704,"fk":1,"flash":1,"hs":6,"id":"392073","k":15,"kastRounds":14,"level":15,"mk2":4,"mk3":0,"mk4":0,"mk5":0,"nick":"Keke","rounds":30,"rp":-19},{"a":7,"clutch":0,"d":24,"dmg":2402,"fk":3,"flash":1,"hs":12,"id":"1189694","k":23,"kastRounds":20,"level":16,"mk2":5,"mk3":1,"mk4":0,"mk5":0,"nick":"J.Rocha","rounds":30,"rp":-9}],"score":[14,16],"win":false},{"date":"2026-09-29T20:31","dateLabel":"29/09/2026 20:31","duration":"38 Minutes","id":"27976319","link":"https://gamersclub.com.br/lobby/match/27976319","map":"de_nuke","opponent":"Team LUCARELLI","players":[{"a":3,"clutch":0,"d":17,"dmg":2569,"fk":3,"flash":0,"hs":17,"id":"1189694","k":26,"kastRounds":19,"level":16,"mk2":3,"mk3":3,"mk4":0,"mk5":0,"nick":"J.Rocha","rounds":23,"rp":-7},{"a":4,"clutch":0,"d":16,"dmg":1705,"fk":3,"flash":1,"hs":3,"id":"251985","k":17,"kastRounds":14,"level":17,"mk2":4,"mk3":1,"mk4":0,"mk5":0,"nick":"TomPz","rounds":23,"rp":-10},{"a":3,"clutch":0,"d":19,"dmg":1564,"fk":2,"flash":0,"hs":7,"id":"1035547","k":11,"kastRounds":12,"level":12,"mk2":2,"mk3":0,"mk4":0,"mk5":0,"nick":"xTheHoSt","rounds":23,"rp":-12},{"a":3,"clutch":0,"d":18,"dmg":1513,"fk":3,"flash":0,"hs":7,"id":"1852904","k":14,"kastRounds":16,"level":13,"mk2":2,"mk3":0,"mk4":0,"mk5":0,"nick":"Markin","rounds":23,"rp":-12},{"a":5,"clutch":0,"d":18,"dmg":1123,"fk":2,"flash":0,"hs":3,"id":"392073","k":7,"kastRounds":12,"level":16,"mk2":1,"mk3":0,"mk4":0,"mk5":0,"nick":"Keke","rounds":23,"rp":-18}],"score":[10,13],"win":false},{"date":"2026-09-29T19:27","dateLabel":"29/09/2026 19:27","duration":"46 Minutes","id":"27975595","link":"https://gamersclub.com.br/lobby/match/27975595","map":"de_cache","opponent":"Team ririx","players":[{"a":11,"clutch":0,"d":16,"dmg":2289,"fk":4,"flash":1,"hs":10,"id":"392073","k":22,"kastRounds":19,"level":15,"mk2":4,"mk3":1,"mk4":0,"mk5":0,"nick":"Keke","rounds":24,"rp":15},{"a":4,"clutch":0,"d":16,"dmg":2040,"fk":3,"flash":2,"hs":9,"id":"251985","k":20,"kastRounds":17,"level":16,"mk2":3,"mk3":2,"mk4":0,"mk5":0,"nick":"TomPz","rounds":24,"rp":12},{"a":5,"clutch":0,"d":19,"dmg":1657,"fk":2,"flash":0,"hs":3,"id":"1852904","k":15,"kastRounds":16,"level":13,"mk2":0,"mk3":0,"mk4":1,"mk5":0,"nick":"Markin","rounds":23,"rp":12},{"a":4,"clutch":0,"d":15,"dmg":1695,"fk":1,"flash":2,"hs":7,"id":"1189694","k":18,"kastRounds":17,"level":16,"mk2":2,"mk3":2,"mk4":0,"mk5":0,"nick":"J.Rocha","rounds":24,"rp":11},{"a":8,"clutch":0,"d":15,"dmg":1426,"fk":0,"flash":2,"hs":6,"id":"1035547","k":12,"kastRounds":19,"level":12,"mk2":4,"mk3":0,"mk4":0,"mk5":0,"nick":"xTheHoSt","rounds":24,"rp":11}],"score":[13,11],"win":true},{"date":"2026-09-28T20:19","dateLabel":"28/09/2026 20:19","duration":"48 Minutes","id":"27969119","link":"https://gamersclub.com.br/lobby/match/27969119","map":"de_inferno","opponent":"Team mcLOVIN AtiraFOFO","players":[{"a":5,"clutch":0,"d":18,"dmg":1733,"fk":0,"flash":1,"hs":6,"id":"251985","k":14,"kastRounds":13,"level":17,"mk2":0,"mk3":2,"mk4":0,"mk5":0,"nick":"TomPz","rounds":22,"rp":-12},{"a":6,"clutch":0,"d":18,"dmg":1569,"fk":0,"flash":0,"hs":7,"id":"1035547","k":14,"kastRounds":13,"level":12,"mk2":4,"mk3":0,"mk4":0,"mk5":0,"nick":"xTheHoSt","rounds":22,"rp":-13},{"a":3,"clutch":0,"d":17,"dmg":1301,"fk":1,"flash":1,"hs":4,"id":"1852904","k":13,"kastRounds":13,"level":14,"mk2":4,"mk3":0,"mk4":0,"mk5":0,"nick":"Markin","rounds":22,"rp":-16},{"a":4,"clutch":0,"d":21,"dmg":1586,"fk":2,"flash":0,"hs":7,"id":"392073","k":13,"kastRounds":13,"level":16,"mk2":2,"mk3":0,"mk4":0,"mk5":0,"nick":"Keke","rounds":22,"rp":-15},{"a":5,"clutch":0,"d":20,"dmg":1852,"fk":8,"flash":0,"hs":10,"id":"1189694","k":18,"kastRounds":17,"level":16,"mk2":5,"mk3":0,"mk4":0,"mk5":0,"nick":"J.Rocha","rounds":22,"rp":-7}],"score":[9,13],"win":false},{"date":"2026-09-28T19:50","dateLabel":"28/09/2026 19:50","duration":"24 Minutes","id":"27968699","link":"https://gamersclub.com.br/lobby/match/27968699","map":"de_mirage","opponent":"Team ZAGUEIRO","players":[{"a":3,"clutch":0,"d":14,"dmg":863,"fk":0,"flash":0,"hs":2,"id":"251985","k":8,"kastRounds":9,"level":17,"mk2":1,"mk3":0,"mk4":0,"mk5":0,"nick":"TomPz","rounds":15,"rp":-16},{"a":5,"clutch":0,"d":14,"dmg":1166,"fk":1,"flash":0,"hs":4,"id":"1035547","k":10,"kastRounds":11,"level":12,"mk2":2,"mk3":0,"mk4":0,"mk5":0,"nick":"xTheHoSt","rounds":15,"rp":-8},{"a":1,"clutch":0,"d":14,"dmg":789,"fk":1,"flash":0,"hs":6,"id":"1852904","k":9,"kastRounds":8,"level":14,"mk2":1,"mk3":0,"mk4":0,"mk5":0,"nick":"Markin","rounds":15,"rp":-15},{"a":5,"clutch":0,"d":14,"dmg":1621,"fk":3,"flash":0,"hs":8,"id":"392073","k":11,"kastRounds":12,"level":16,"mk2":1,"mk3":0,"mk4":0,"mk5":0,"nick":"Keke","rounds":15,"rp":-6},{"a":1,"clutch":0,"d":14,"dmg":911,"fk":2,"flash":0,"hs":3,"id":"1189694","k":5,"kastRounds":7,"level":16,"mk2":0,"mk3":0,"mk4":0,"mk5":0,"nick":"J.Rocha","rounds":15,"rp":-16}],"score":[2,13],"win":false},{"date":"2026-09-28T19:02","dateLabel":"28/09/2026 19:02","duration":"40 Minutes","id":"27968183","link":"https://gamersclub.com.br/lobby/match/27968183","map":"de_cache","opponent":"Team teteuINSERT-","players":[{"a":8,"clutch":0,"d":19,"dmg":2323,"fk":3,"flash":1,"hs":12,"id":"1189694","k":18,"kastRounds":12,"level":16,"mk2":4,"mk3":2,"mk4":0,"mk5":0,"nick":"J.Rocha","rounds":23,"rp":15},{"a":3,"clutch":0,"d":15,"dmg":1951,"fk":2,"flash":0,"hs":7,"id":"1035547","k":17,"kastRounds":17,"level":12,"mk2":3,"mk3":1,"mk4":0,"mk5":0,"nick":"xTheHoSt","rounds":23,"rp":18},{"a":5,"clutch":0,"d":18,"dmg":1909,"fk":2,"flash":1,"hs":4,"id":"1852904","k":17,"kastRounds":14,"level":13,"mk2":2,"mk3":1,"mk4":0,"mk5":1,"nick":"Markin","rounds":23,"rp":17},{"a":5,"clutch":0,"d":16,"dmg":1596,"fk":1,"flash":2,"hs":9,"id":"392073","k":17,"kastRounds":15,"level":16,"mk2":1,"mk3":3,"mk4":0,"mk5":0,"nick":"Keke","rounds":23,"rp":13},{"a":7,"clutch":0,"d":14,"dmg":1309,"fk":3,"flash":2,"hs":6,"id":"251985","k":13,"kastRounds":15,"level":17,"mk2":1,"mk3":1,"mk4":0,"mk5":0,"nick":"TomPz","rounds":23,"rp":13}],"score":[13,10],"win":true},{"date":"2026-09-27T21:51","dateLabel":"27/09/2026 21:51","duration":"36 Minutes","id":"27963950","link":"https://gamersclub.com.br/lobby/match/27963950","map":"de_mirage","opponent":"Team homem tartaruga","players":[{"a":7,"clutch":0,"d":14,"dmg":1864,"fk":3,"flash":0,"hs":10,"id":"251985","k":14,"kastRounds":16,"level":16,"mk2":3,"mk3":0,"mk4":0,"mk5":0,"nick":"TomPz","rounds":21,"rp":10},{"a":4,"clutch":0,"d":18,"dmg":1208,"fk":3,"flash":0,"hs":4,"id":"1035547","k":11,"kastRounds":13,"level":12,"mk2":2,"mk3":0,"mk4":0,"mk5":0,"nick":"xTheHoSt","rounds":21,"rp":11},{"a":4,"clutch":0,"d":10,"dmg":2035,"fk":2,"flash":1,"hs":11,"id":"1852904","k":23,"kastRounds":15,"level":13,"mk2":3,"mk3":3,"mk4":0,"mk5":0,"nick":"Markin","rounds":21,"rp":18},{"a":5,"clutch":0,"d":14,"dmg":1324,"fk":1,"flash":0,"hs":5,"id":"392073","k":11,"kastRounds":12,"level":15,"mk2":4,"mk3":0,"mk4":0,"mk5":0,"nick":"Keke","rounds":21,"rp":9},{"a":2,"clutch":0,"d":15,"dmg":1334,"fk":1,"flash":0,"hs":10,"id":"1189694","k":14,"kastRounds":10,"level":16,"mk2":3,"mk3":1,"mk4":0,"mk5":0,"nick":"J.Rocha","rounds":21,"rp":8}],"score":[13,8],"win":true},{"date":"2026-09-27T21:05","dateLabel":"27/09/2026 21:05","duration":"44 Minutes","id":"27963346","link":"https://gamersclub.com.br/lobby/match/27963346","map":"de_overpass","opponent":"Team ACE","players":[{"a":5,"clutch":0,"d":13,"dmg":2072,"fk":2,"flash":0,"hs":12,"id":"1852904","k":23,"kastRounds":20,"level":13,"mk2":6,"mk3":0,"mk4":0,"mk5":0,"nick":"Markin","rounds":24,"rp":15},{"a":8,"clutch":0,"d":16,"dmg":2040,"fk":2,"flash":0,"hs":11,"id":"392073","k":16,"kastRounds":17,"level":15,"mk2":3,"mk3":0,"mk4":0,"mk5":0,"nick":"Keke","rounds":24,"rp":12},{"a":6,"clutch":0,"d":18,"dmg":1888,"fk":2,"flash":1,"hs":9,"id":"251985","k":16,"kastRounds":16,"level":16,"mk2":4,"mk3":0,"mk4":0,"mk5":0,"nick":"TomPz","rounds":24,"rp":12},{"a":10,"clutch":0,"d":17,"dmg":1882,"fk":4,"flash":0,"hs":4,"id":"1189694","k":16,"kastRounds":19,"level":16,"mk2":3,"mk3":0,"mk4":0,"mk5":0,"nick":"J.Rocha","rounds":24,"rp":12},{"a":6,"clutch":0,"d":16,"dmg":1818,"fk":3,"flash":0,"hs":11,"id":"1035547","k":20,"kastRounds":19,"level":12,"mk2":1,"mk3":2,"mk4":1,"mk5":0,"nick":"xTheHoSt","rounds":24,"rp":16}],"score":[13,11],"win":true},{"date":"2026-09-27T20:19","dateLabel":"27/09/2026 20:19","duration":"40 Minutes","id":"27962750","link":"https://gamersclub.com.br/lobby/match/27962750","map":"de_cache","opponent":"Team choseN","players":[{"a":5,"clutch":0,"d":15,"dmg":1535,"fk":1,"flash":2,"hs":4,"id":"251985","k":14,"kastRounds":19,"level":16,"mk2":3,"mk3":0,"mk4":0,"mk5":0,"nick":"TomPz","rounds":24,"rp":-16},{"a":3,"clutch":0,"d":13,"dmg":1918,"fk":3,"flash":1,"hs":7,"id":"1035547","k":20,"kastRounds":15,"level":12,"mk2":5,"mk3":2,"mk4":0,"mk5":0,"nick":"xTheHoSt","rounds":24,"rp":-9},{"a":1,"clutch":0,"d":17,"dmg":1257,"fk":3,"flash":0,"hs":2,"id":"1852904","k":12,"kastRounds":12,"level":13,"mk2":2,"mk3":1,"mk4":0,"mk5":0,"nick":"Markin","rounds":24,"rp":-20},{"a":9,"clutch":0,"d":17,"dmg":2464,"fk":3,"flash":1,"hs":10,"id":"392073","k":17,"kastRounds":18,"level":15,"mk2":3,"mk3":1,"mk4":0,"mk5":0,"nick":"Keke","rounds":24,"rp":-9},{"a":3,"clutch":0,"d":19,"dmg":1474,"fk":0,"flash":0,"hs":7,"id":"1189694","k":15,"kastRounds":14,"level":16,"mk2":2,"mk3":2,"mk4":0,"mk5":0,"nick":"J.Rocha","rounds":24,"rp":-19}],"score":[11,13],"win":false},{"date":"2026-09-27T19:36","dateLabel":"27/09/2026 19:36","duration":"40 Minutes","id":"27962236","link":"https://gamersclub.com.br/lobby/match/27962236","map":"de_inferno","opponent":"Team n e e l i x","players":[{"a":8,"clutch":0,"d":17,"dmg":2537,"fk":2,"flash":0,"hs":14,"id":"1189694","k":27,"kastRounds":17,"level":16,"mk2":5,"mk3":4,"mk4":0,"mk5":0,"nick":"J.Rocha","rounds":24,"rp":15},{"a":6,"clutch":0,"d":17,"dmg":2137,"fk":4,"flash":0,"hs":9,"id":"392073","k":22,"kastRounds":17,"level":15,"mk2":3,"mk3":1,"mk4":1,"mk5":0,"nick":"Keke","rounds":24,"rp":15},{"a":9,"clutch":0,"d":16,"dmg":1948,"fk":4,"flash":0,"hs":6,"id":"1852904","k":13,"kastRounds":19,"level":13,"mk2":2,"mk3":0,"mk4":0,"mk5":0,"nick":"Markin","rounds":24,"rp":14},{"a":3,"clutch":0,"d":18,"dmg":1428,"fk":2,"flash":0,"hs":4,"id":"1035547","k":16,"kastRounds":17,"level":12,"mk2":3,"mk3":0,"mk4":0,"mk5":0,"nick":"xTheHoSt","rounds":24,"rp":12},{"a":9,"clutch":0,"d":12,"dmg":1084,"fk":0,"flash":3,"hs":2,"id":"251985","k":7,"kastRounds":13,"level":16,"mk2":1,"mk3":0,"mk4":0,"mk5":0,"nick":"TomPz","rounds":24,"rp":7}],"score":[13,11],"win":true},{"date":"2026-09-27T18:33","dateLabel":"27/09/2026 18:33","duration":"41 Minutes","id":"27961539","link":"https://gamersclub.com.br/lobby/match/27961539","map":"de_mirage","opponent":"Team COLG4TE SENSITIVE","players":[{"a":9,"clutch":0,"d":16,"dmg":2345,"fk":0,"flash":2,"hs":10,"id":"251985","k":19,"kastRounds":16,"level":16,"mk2":3,"mk3":0,"mk4":2,"mk5":0,"nick":"TomPz","rounds":24,"rp":16},{"a":8,"clutch":0,"d":17,"dmg":1198,"fk":2,"flash":1,"hs":2,"id":"1035547","k":10,"kastRounds":15,"level":12,"mk2":2,"mk3":0,"mk4":0,"mk5":0,"nick":"xTheHoSt","rounds":24,"rp":12},{"a":8,"clutch":0,"d":17,"dmg":1873,"fk":1,"flash":0,"hs":6,"id":"1852904","k":18,"kastRounds":18,"level":13,"mk2":3,"mk3":1,"mk4":0,"mk5":0,"nick":"Markin","rounds":24,"rp":15},{"a":3,"clutch":0,"d":16,"dmg":1265,"fk":3,"flash":0,"hs":3,"id":"1189694","k":14,"kastRounds":14,"level":16,"mk2":3,"mk3":0,"mk4":0,"mk5":0,"nick":"J.Rocha","rounds":24,"rp":12}],"score":[13,11],"win":true},{"date":"2026-09-26T22:39","dateLabel":"26/09/2026 22:39","duration":"39 Minutes","id":"27955172","link":"https://gamersclub.com.br/lobby/match/27955172","map":"de_inferno","opponent":"Team V1NI KIT BOTA","players":[{"a":8,"clutch":0,"d":16,"dmg":2146,"fk":4,"flash":3,"hs":9,"id":"392073","k":21,"kastRounds":17,"level":15,"mk2":2,"mk3":3,"mk4":0,"mk5":0,"nick":"Keke","rounds":22,"rp":14},{"a":11,"clutch":0,"d":11,"dmg":2072,"fk":2,"flash":3,"hs":6,"id":"251985","k":20,"kastRounds":17,"level":16,"mk2":4,"mk3":2,"mk4":0,"mk5":0,"nick":"TomPz","rounds":22,"rp":14},{"a":5,"clutch":0,"d":14,"dmg":1942,"fk":1,"flash":0,"hs":8,"id":"1035547","k":19,"kastRounds":16,"level":11,"mk2":3,"mk3":0,"mk4":1,"mk5":0,"nick":"xTheHoSt","rounds":22,"rp":14},{"a":3,"clutch":0,"d":14,"dmg":1896,"fk":3,"flash":0,"hs":10,"id":"1852904","k":20,"kastRounds":17,"level":13,"mk2":6,"mk3":1,"mk4":0,"mk5":0,"nick":"Markin","rounds":22,"rp":13},{"a":4,"clutch":0,"d":16,"dmg":1092,"fk":1,"flash":0,"hs":1,"id":"1189694","k":8,"kastRounds":12,"level":16,"mk2":2,"mk3":0,"mk4":0,"mk5":0,"nick":"J.Rocha","rounds":22,"rp":7}],"score":[13,9],"win":true},{"date":"2026-09-26T21:43","dateLabel":"26/09/2026 21:43","duration":"53 Minutes","id":"27954641","link":"https://gamersclub.com.br/lobby/match/27954641","map":"de_overpass","opponent":"Team PIRUUUUUUU","players":[{"a":3,"clutch":0,"d":18,"dmg":2321,"fk":2,"flash":0,"hs":7,"id":"251985","k":21,"kastRounds":20,"level":16,"mk2":3,"mk3":0,"mk4":1,"mk5":0,"nick":"TomPz","rounds":29,"rp":9},{"a":3,"clutch":0,"d":20,"dmg":1996,"fk":3,"flash":0,"hs":8,"id":"1035547","k":19,"kastRounds":18,"level":11,"mk2":4,"mk3":0,"mk4":0,"mk5":0,"nick":"xTheHoSt","rounds":29,"rp":11},{"a":2,"clutch":0,"d":17,"dmg":3018,"fk":3,"flash":0,"hs":14,"id":"1852904","k":32,"kastRounds":24,"level":13,"mk2":4,"mk3":1,"mk4":1,"mk5":1,"nick":"Markin","rounds":29,"rp":19},{"a":9,"clutch":0,"d":21,"dmg":2061,"fk":3,"flash":0,"hs":8,"id":"392073","k":15,"kastRounds":18,"level":15,"mk2":4,"mk3":0,"mk4":0,"mk5":0,"nick":"Keke","rounds":29,"rp":10},{"a":6,"clutch":0,"d":18,"dmg":2344,"fk":2,"flash":1,"hs":10,"id":"1189694","k":21,"kastRounds":18,"level":16,"mk2":4,"mk3":2,"mk4":0,"mk5":0,"nick":"J.Rocha","rounds":29,"rp":12}],"score":[16,13],"win":true},{"date":"2026-09-26T21:00","dateLabel":"26/09/2026 21:00","duration":"40 Minutes","id":"27954300","link":"https://gamersclub.com.br/lobby/match/27954300","map":"de_mirage","opponent":"Team gab","players":[{"a":8,"clutch":0,"d":19,"dmg":1929,"fk":3,"flash":0,"hs":6,"id":"1189694","k":13,"kastRounds":15,"level":16,"mk2":3,"mk3":0,"mk4":0,"mk5":0,"nick":"J.Rocha","rounds":21,"rp":-10},{"a":6,"clutch":0,"d":18,"dmg":1563,"fk":1,"flash":0,"hs":6,"id":"1035547","k":14,"kastRounds":12,"level":11,"mk2":4,"mk3":0,"mk4":0,"mk5":0,"nick":"xTheHoSt","rounds":21,"rp":-11},{"a":2,"clutch":0,"d":17,"dmg":1549,"fk":0,"flash":0,"hs":6,"id":"392073","k":14,"kastRounds":10,"level":15,"mk2":4,"mk3":0,"mk4":1,"mk5":0,"nick":"Keke","rounds":21,"rp":-15},{"a":4,"clutch":0,"d":16,"dmg":1391,"fk":0,"flash":0,"hs":8,"id":"1852904","k":14,"kastRounds":13,"level":13,"mk2":3,"mk3":1,"mk4":0,"mk5":0,"nick":"Markin","rounds":21,"rp":-12},{"a":4,"clutch":0,"d":17,"dmg":1129,"fk":0,"flash":0,"hs":6,"id":"251985","k":15,"kastRounds":11,"level":16,"mk2":3,"mk3":0,"mk4":1,"mk5":0,"nick":"TomPz","rounds":21,"rp":-16}],"score":[8,13],"win":false},{"date":"2026-09-26T20:22","dateLabel":"26/09/2026 20:22","duration":"36 Minutes","id":"27953998","link":"https://gamersclub.com.br/lobby/match/27953998","map":"de_nuke","opponent":"Team Bago Direito","players":[{"a":4,"clutch":0,"d":13,"dmg":3122,"fk":3,"flash":0,"hs":16,"id":"251985","k":28,"kastRounds":19,"level":16,"mk2":8,"mk3":1,"mk4":0,"mk5":0,"nick":"TomPz","rounds":23,"rp":17},{"a":2,"clutch":0,"d":14,"dmg":1367,"fk":2,"flash":0,"hs":4,"id":"1035547","k":14,"kastRounds":15,"level":11,"mk2":3,"mk3":0,"mk4":0,"mk5":0,"nick":"xTheHoSt","rounds":23,"rp":11},{"a":3,"clutch":0,"d":13,"dmg":1544,"fk":3,"flash":0,"hs":5,"id":"1852904","k":14,"kastRounds":15,"level":13,"mk2":3,"mk3":1,"mk4":0,"mk5":0,"nick":"Markin","rounds":23,"rp":12},{"a":2,"clutch":0,"d":17,"dmg":1670,"fk":2,"flash":1,"hs":10,"id":"392073","k":17,"kastRounds":13,"level":15,"mk2":6,"mk3":0,"mk4":0,"mk5":0,"nick":"Keke","rounds":23,"rp":11},{"a":5,"clutch":0,"d":15,"dmg":1991,"fk":3,"flash":0,"hs":11,"id":"1189694","k":18,"kastRounds":16,"level":16,"mk2":4,"mk3":1,"mk4":0,"mk5":0,"nick":"J.Rocha","rounds":23,"rp":12}],"score":[13,10],"win":true},{"date":"2026-09-26T19:34","dateLabel":"26/09/2026 19:34","duration":"37 Minutes","id":"27953655","link":"https://gamersclub.com.br/lobby/match/27953655","map":"de_ancient","opponent":"Team siryj1","players":[{"a":4,"clutch":0,"d":19,"dmg":1709,"fk":3,"flash":0,"hs":9,"id":"1189694","k":16,"kastRounds":12,"level":16,"mk2":1,"mk3":1,"mk4":1,"mk5":0,"nick":"J.Rocha","rounds":20,"rp":-8},{"a":5,"clutch":0,"d":15,"dmg":1521,"fk":1,"flash":0,"hs":9,"id":"251985","k":13,"kastRounds":12,"level":16,"mk2":4,"mk3":0,"mk4":0,"mk5":0,"nick":"TomPz","rounds":20,"rp":-10},{"a":3,"clutch":0,"d":16,"dmg":1223,"fk":0,"flash":0,"hs":3,"id":"1852904","k":10,"kastRounds":12,"level":13,"mk2":2,"mk3":0,"mk4":0,"mk5":0,"nick":"Markin","rounds":20,"rp":-12},{"a":6,"clutch":0,"d":15,"dmg":1158,"fk":0,"flash":0,"hs":4,"id":"1035547","k":9,"kastRounds":11,"level":11,"mk2":1,"mk3":0,"mk4":0,"mk5":0,"nick":"xTheHoSt","rounds":20,"rp":-15},{"a":1,"clutch":0,"d":15,"dmg":909,"fk":1,"flash":0,"hs":3,"id":"392073","k":9,"kastRounds":8,"level":15,"mk2":2,"mk3":0,"mk4":0,"mk5":0,"nick":"Keke","rounds":19,"rp":-20}],"score":[7,13],"win":false},{"date":"2026-09-26T19:04","dateLabel":"26/09/2026 19:04","duration":"28 Minutes","id":"27953449","link":"https://gamersclub.com.br/lobby/match/27953449","map":"de_mirage","opponent":"Team HAHAHAHA","players":[{"a":4,"clutch":0,"d":7,"dmg":1515,"fk":2,"flash":1,"hs":6,"id":"392073","k":14,"kastRounds":12,"level":15,"mk2":2,"mk3":0,"mk4":1,"mk5":0,"nick":"Keke","rounds":14,"rp":16},{"a":9,"clutch":0,"d":5,"dmg":1438,"fk":0,"flash":1,"hs":7,"id":"1035547","k":12,"kastRounds":13,"level":11,"mk2":3,"mk3":1,"mk4":0,"mk5":0,"nick":"xTheHoSt","rounds":14,"rp":16},{"a":2,"clutch":0,"d":9,"dmg":1325,"fk":5,"flash":0,"hs":6,"id":"1852904","k":15,"kastRounds":14,"level":13,"mk2":3,"mk3":0,"mk4":0,"mk5":0,"nick":"Markin","rounds":14,"rp":15},{"a":5,"clutch":0,"d":9,"dmg":1298,"fk":3,"flash":2,"hs":8,"id":"251985","k":13,"kastRounds":11,"level":16,"mk2":3,"mk3":0,"mk4":0,"mk5":0,"nick":"TomPz","rounds":14,"rp":12},{"a":1,"clutch":0,"d":6,"dmg":926,"fk":0,"flash":0,"hs":5,"id":"1189694","k":10,"kastRounds":10,"level":16,"mk2":3,"mk3":0,"mk4":0,"mk5":0,"nick":"J.Rocha","rounds":14,"rp":9}],"score":[13,1],"win":true},{"date":"2026-09-26T18:23","dateLabel":"26/09/2026 18:23","duration":"36 Minutes","id":"27953133","link":"https://gamersclub.com.br/lobby/match/27953133","map":"de_inferno","opponent":"Team Sbal #RO","players":[{"a":5,"clutch":0,"d":8,"dmg":1537,"fk":0,"flash":0,"hs":8,"id":"251985","k":18,"kastRounds":13,"level":16,"mk2":5,"mk3":0,"mk4":1,"mk5":0,"nick":"TomPz","rounds":18,"rp":14},{"a":5,"clutch":0,"d":11,"dmg":1298,"fk":1,"flash":1,"hs":4,"id":"1035547","k":10,"kastRounds":13,"level":11,"mk2":0,"mk3":0,"mk4":0,"mk5":0,"nick":"xTheHoSt","rounds":18,"rp":14},{"a":7,"clutch":0,"d":11,"dmg":1778,"fk":4,"flash":0,"hs":6,"id":"1852904","k":17,"kastRounds":16,"level":13,"mk2":3,"mk3":1,"mk4":0,"mk5":0,"nick":"Markin","rounds":18,"rp":17},{"a":6,"clutch":0,"d":12,"dmg":1599,"fk":2,"flash":0,"hs":10,"id":"392073","k":16,"kastRounds":15,"level":15,"mk2":4,"mk3":1,"mk4":0,"mk5":0,"nick":"Keke","rounds":18,"rp":13},{"a":3,"clutch":0,"d":12,"dmg":1547,"fk":3,"flash":0,"hs":11,"id":"1189694","k":14,"kastRounds":13,"level":16,"mk2":2,"mk3":1,"mk4":0,"mk5":0,"nick":"J.Rocha","rounds":18,"rp":12}],"score":[13,5],"win":true},{"date":"2026-09-25T22:37","dateLabel":"25/09/2026 22:37","duration":"37 Minutes","id":"27947282","link":"https://gamersclub.com.br/lobby/match/27947282","map":"de_ancient","opponent":"Team Shelby","players":[{"a":9,"clutch":0,"d":21,"dmg":2460,"fk":4,"flash":0,"hs":12,"id":"1189694","k":20,"kastRounds":19,"level":16,"mk2":2,"mk3":1,"mk4":1,"mk5":0,"nick":"J.Rocha","rounds":24,"rp":-8},{"a":8,"clutch":0,"d":22,"dmg":2006,"fk":3,"flash":0,"hs":11,"id":"1852904","k":19,"kastRounds":16,"level":13,"mk2":7,"mk3":0,"mk4":0,"mk5":0,"nick":"Markin","rounds":24,"rp":-22},{"a":5,"clutch":0,"d":18,"dmg":1800,"fk":0,"flash":0,"hs":6,"id":"1035547","k":18,"kastRounds":13,"level":11,"mk2":3,"mk3":3,"mk4":0,"mk5":0,"nick":"xTheHoSt","rounds":24,"rp":-10},{"a":6,"clutch":0,"d":17,"dmg":1582,"fk":1,"flash":0,"hs":10,"id":"251985","k":14,"kastRounds":16,"level":16,"mk2":2,"mk3":1,"mk4":0,"mk5":0,"nick":"TomPz","rounds":24,"rp":-18}],"score":[11,13],"win":false},{"date":"2026-09-25T21:53","dateLabel":"25/09/2026 21:53","duration":"39 Minutes","id":"27946764","link":"https://gamersclub.com.br/lobby/match/27946764","map":"de_inferno","opponent":"Team malvado","players":[{"a":3,"clutch":0,"d":17,"dmg":1862,"fk":5,"flash":0,"hs":12,"id":"1189694","k":18,"kastRounds":13,"level":16,"mk2":4,"mk3":0,"mk4":1,"mk5":0,"nick":"J.Rocha","rounds":21,"rp":-9},{"a":5,"clutch":0,"d":17,"dmg":981,"fk":0,"flash":1,"hs":4,"id":"1035547","k":8,"kastRounds":11,"level":11,"mk2":1,"mk3":0,"mk4":0,"mk5":0,"nick":"xTheHoSt","rounds":21,"rp":-18},{"a":5,"clutch":0,"d":16,"dmg":1551,"fk":2,"flash":0,"hs":6,"id":"1852904","k":12,"kastRounds":13,"level":13,"mk2":2,"mk3":0,"mk4":0,"mk5":0,"nick":"Markin","rounds":21,"rp":-24},{"a":7,"clutch":0,"d":14,"dmg":1763,"fk":1,"flash":0,"hs":2,"id":"251985","k":8,"kastRounds":14,"level":16,"mk2":0,"mk3":0,"mk4":0,"mk5":0,"nick":"TomPz","rounds":21,"rp":-12}],"score":[8,13],"win":false},{"date":"2026-09-25T21:13","dateLabel":"25/09/2026 21:13","duration":"31 Minutes","id":"27946359","link":"https://gamersclub.com.br/lobby/match/27946359","map":"de_mirage","opponent":"Team ySniper","players":[{"a":8,"clutch":0,"d":11,"dmg":1952,"fk":6,"flash":0,"hs":10,"id":"1035547","k":17,"kastRounds":14,"level":11,"mk2":2,"mk3":2,"mk4":0,"mk5":0,"nick":"xTheHoSt","rounds":17,"rp":17},{"a":3,"clutch":0,"d":9,"dmg":1453,"fk":2,"flash":0,"hs":8,"id":"251985","k":17,"kastRounds":15,"level":16,"mk2":1,"mk3":2,"mk4":0,"mk5":0,"nick":"TomPz","rounds":17,"rp":12},{"a":6,"clutch":0,"d":13,"dmg":1191,"fk":3,"flash":0,"hs":3,"id":"1852904","k":10,"kastRounds":11,"level":13,"mk2":4,"mk3":0,"mk4":0,"mk5":0,"nick":"Markin","rounds":17,"rp":20},{"a":5,"clutch":0,"d":8,"dmg":1893,"fk":0,"flash":0,"hs":8,"id":"1189694","k":19,"kastRounds":14,"level":16,"mk2":3,"mk3":0,"mk4":1,"mk5":1,"nick":"J.Rocha","rounds":17,"rp":17}],"score":[13,4],"win":true},{"date":"2026-09-25T20:21","dateLabel":"25/09/2026 20:21","duration":"43 Minutes","id":"27945902","link":"https://gamersclub.com.br/lobby/match/27945902","map":"de_overpass","opponent":"Team ChicoDoAcre","players":[{"a":7,"clutch":0,"d":16,"dmg":2011,"fk":3,"flash":1,"hs":11,"id":"251985","k":19,"kastRounds":18,"level":16,"mk2":2,"mk3":2,"mk4":0,"mk5":0,"nick":"TomPz","rounds":24,"rp":14},{"a":4,"clutch":0,"d":17,"dmg":2135,"fk":3,"flash":0,"hs":11,"id":"1035547","k":22,"kastRounds":16,"level":11,"mk2":3,"mk3":2,"mk4":0,"mk5":0,"nick":"xTheHoSt","rounds":24,"rp":15},{"a":1,"clutch":0,"d":17,"dmg":1755,"fk":2,"flash":0,"hs":8,"id":"1852904","k":15,"kastRounds":13,"level":13,"mk2":2,"mk3":0,"mk4":1,"mk5":0,"nick":"Markin","rounds":24,"rp":24},{"a":7,"clutch":0,"d":19,"dmg":1321,"fk":2,"flash":0,"hs":4,"id":"1189694","k":10,"kastRounds":14,"level":16,"mk2":1,"mk3":0,"mk4":0,"mk5":0,"nick":"J.Rocha","rounds":24,"rp":9}],"score":[13,11],"win":true},{"date":"2026-09-25T19:45","dateLabel":"25/09/2026 19:45","duration":"28 Minutes","id":"27945613","link":"https://gamersclub.com.br/lobby/match/27945613","map":"de_nuke","opponent":"Team cachorro1 @jojo","players":[{"a":0,"clutch":0,"d":14,"dmg":1192,"fk":1,"flash":0,"hs":7,"id":"1035547","k":12,"kastRounds":11,"level":11,"mk2":3,"mk3":0,"mk4":0,"mk5":0,"nick":"xTheHoSt","rounds":17,"rp":-7},{"a":6,"clutch":0,"d":16,"dmg":1170,"fk":0,"flash":0,"hs":7,"id":"1189694","k":8,"kastRounds":11,"level":16,"mk2":2,"mk3":0,"mk4":0,"mk5":0,"nick":"J.Rocha","rounds":17,"rp":-11},{"a":4,"clutch":0,"d":14,"dmg":1042,"fk":1,"flash":0,"hs":6,"id":"251985","k":7,"kastRounds":10,"level":16,"mk2":1,"mk3":0,"mk4":0,"mk5":0,"nick":"TomPz","rounds":17,"rp":-13},{"a":4,"clutch":0,"d":14,"dmg":982,"fk":2,"flash":0,"hs":5,"id":"1852904","k":7,"kastRounds":9,"level":13,"mk2":0,"mk3":0,"mk4":0,"mk5":0,"nick":"Markin","rounds":17,"rp":-26}],"score":[4,13],"win":false},{"date":"2026-09-24T22:00","dateLabel":"24/09/2026 22:00","duration":"40 Minutes","id":"27940702","link":"https://gamersclub.com.br/lobby/match/27940702","map":"de_cache","opponent":"Team GBL","players":[{"a":3,"clutch":0,"d":18,"dmg":2358,"fk":6,"flash":0,"hs":14,"id":"1189694","k":23,"kastRounds":17,"level":16,"mk2":3,"mk3":2,"mk4":1,"mk5":0,"nick":"J.Rocha","rounds":24,"rp":15},{"a":7,"clutch":0,"d":17,"dmg":2318,"fk":2,"flash":2,"hs":12,"id":"251985","k":21,"kastRounds":21,"level":16,"mk2":4,"mk3":1,"mk4":0,"mk5":0,"nick":"TomPz","rounds":24,"rp":14},{"a":5,"clutch":0,"d":18,"dmg":1804,"fk":2,"flash":0,"hs":8,"id":"392073","k":18,"kastRounds":17,"level":15,"mk2":4,"mk3":1,"mk4":0,"mk5":0,"nick":"Keke","rounds":24,"rp":11},{"a":3,"clutch":0,"d":14,"dmg":1613,"fk":2,"flash":1,"hs":6,"id":"1035547","k":14,"kastRounds":17,"level":11,"mk2":2,"mk3":1,"mk4":0,"mk5":0,"nick":"xTheHoSt","rounds":24,"rp":13},{"a":4,"clutch":0,"d":19,"dmg":1565,"fk":0,"flash":0,"hs":4,"id":"1852904","k":13,"kastRounds":15,"level":13,"mk2":3,"mk3":0,"mk4":0,"mk5":0,"nick":"Markin","rounds":24,"rp":9}],"score":[13,11],"win":true},{"date":"2026-09-24T21:23","dateLabel":"24/09/2026 21:23","duration":"34 Minutes","id":"27940229","link":"https://gamersclub.com.br/lobby/match/27940229","map":"de_nuke","opponent":"Team piveT-","players":[{"a":11,"clutch":0,"d":18,"dmg":2168,"fk":2,"flash":1,"hs":11,"id":"1189694","k":17,"kastRounds":19,"level":16,"mk2":2,"mk3":1,"mk4":0,"mk5":0,"nick":"J.Rocha","rounds":22,"rp":-7},{"a":6,"clutch":0,"d":15,"dmg":1811,"fk":3,"flash":2,"hs":9,"id":"251985","k":22,"kastRounds":17,"level":16,"mk2":4,"mk3":0,"mk4":2,"mk5":0,"nick":"TomPz","rounds":22,"rp":-9},{"a":5,"clutch":0,"d":17,"dmg":1489,"fk":4,"flash":1,"hs":6,"id":"1035547","k":14,"kastRounds":16,"level":11,"mk2":1,"mk3":1,"mk4":0,"mk5":0,"nick":"xTheHoSt","rounds":22,"rp":-11},{"a":3,"clutch":0,"d":16,"dmg":1255,"fk":1,"flash":0,"hs":6,"id":"1852904","k":14,"kastRounds":14,"level":13,"mk2":3,"mk3":1,"mk4":0,"mk5":0,"nick":"Markin","rounds":22,"rp":-14},{"a":4,"clutch":0,"d":17,"dmg":1180,"fk":0,"flash":0,"hs":6,"id":"392073","k":9,"kastRounds":10,"level":15,"mk2":2,"mk3":0,"mk4":0,"mk5":0,"nick":"Keke","rounds":22,"rp":-20}],"score":[9,13],"win":false},{"date":"2026-09-24T20:38","dateLabel":"24/09/2026 20:38","duration":"39 Minutes","id":"27939630","link":"https://gamersclub.com.br/lobby/match/27939630","map":"de_mirage","opponent":"Team Doidin do Centro","players":[{"a":10,"clutch":0,"d":19,"dmg":2155,"fk":3,"flash":1,"hs":6,"id":"1035547","k":19,"kastRounds":17,"level":11,"mk2":5,"mk3":2,"mk4":0,"mk5":0,"nick":"xTheHoSt","rounds":23,"rp":15},{"a":9,"clutch":0,"d":12,"dmg":2107,"fk":1,"flash":3,"hs":10,"id":"251985","k":24,"kastRounds":20,"level":16,"mk2":3,"mk3":3,"mk4":0,"mk5":0,"nick":"TomPz","rounds":23,"rp":15},{"a":3,"clutch":0,"d":14,"dmg":1990,"fk":4,"flash":0,"hs":3,"id":"1852904","k":21,"kastRounds":19,"level":13,"mk2":3,"mk3":1,"mk4":0,"mk5":0,"nick":"Markin","rounds":23,"rp":16},{"a":4,"clutch":0,"d":15,"dmg":1571,"fk":2,"flash":1,"hs":7,"id":"1189694","k":14,"kastRounds":13,"level":16,"mk2":3,"mk3":1,"mk4":0,"mk5":0,"nick":"J.Rocha","rounds":23,"rp":10},{"a":10,"clutch":0,"d":19,"dmg":1447,"fk":0,"flash":1,"hs":3,"id":"392073","k":13,"kastRounds":17,"level":15,"mk2":2,"mk3":0,"mk4":0,"mk5":0,"nick":"Keke","rounds":23,"rp":10}],"score":[13,10],"win":true},{"date":"2026-09-24T19:41","dateLabel":"24/09/2026 19:41","duration":"47 Minutes","id":"27939011","link":"https://gamersclub.com.br/lobby/match/27939011","map":"de_overpass","opponent":"Team NA NA NAVIO IMPROLDUPUG1","players":[{"a":2,"clutch":0,"d":13,"dmg":2046,"fk":1,"flash":0,"hs":12,"id":"251985","k":21,"kastRounds":16,"level":16,"mk2":2,"mk3":3,"mk4":0,"mk5":0,"nick":"TomPz","rounds":23,"rp":14},{"a":7,"clutch":0,"d":18,"dmg":1611,"fk":2,"flash":0,"hs":8,"id":"1035547","k":14,"kastRounds":14,"level":11,"mk2":0,"mk3":1,"mk4":1,"mk5":0,"nick":"xTheHoSt","rounds":23,"rp":16},{"a":4,"clutch":0,"d":15,"dmg":1296,"fk":0,"flash":1,"hs":6,"id":"1852904","k":13,"kastRounds":14,"level":13,"mk2":2,"mk3":2,"mk4":0,"mk5":0,"nick":"Markin","rounds":22,"rp":11},{"a":5,"clutch":0,"d":15,"dmg":1926,"fk":3,"flash":1,"hs":4,"id":"392073","k":18,"kastRounds":16,"level":15,"mk2":4,"mk3":1,"mk4":0,"mk5":0,"nick":"Keke","rounds":23,"rp":15},{"a":5,"clutch":0,"d":16,"dmg":1972,"fk":2,"flash":0,"hs":6,"id":"1189694","k":18,"kastRounds":13,"level":15,"mk2":3,"mk3":3,"mk4":0,"mk5":0,"nick":"J.Rocha","rounds":23,"rp":13}],"score":[13,10],"win":true},{"date":"2026-09-23T21:28","dateLabel":"23/09/2026 21:28","duration":"47 Minutes","id":"27933717","link":"https://gamersclub.com.br/lobby/match/27933717","map":"de_inferno","opponent":"Team r1;","players":[{"a":6,"clutch":0,"d":16,"dmg":2455,"fk":3,"flash":1,"hs":14,"id":"251985","k":22,"kastRounds":17,"level":16,"mk2":5,"mk3":1,"mk4":0,"mk5":0,"nick":"TomPz","rounds":24,"rp":-8},{"a":3,"clutch":0,"d":19,"dmg":1394,"fk":1,"flash":0,"hs":2,"id":"1035547","k":14,"kastRounds":15,"level":11,"mk2":3,"mk3":0,"mk4":0,"mk5":0,"nick":"xTheHoSt","rounds":24,"rp":-12},{"a":4,"clutch":0,"d":20,"dmg":1371,"fk":5,"flash":0,"hs":10,"id":"1189694","k":13,"kastRounds":12,"level":16,"mk2":1,"mk3":1,"mk4":0,"mk5":0,"nick":"J.Rocha","rounds":24,"rp":-16}],"score":[11,13],"win":false},{"date":"2026-09-23T20:43","dateLabel":"23/09/2026 20:43","duration":"38 Minutes","id":"27933074","link":"https://gamersclub.com.br/lobby/match/27933074","map":"de_overpass","opponent":"Tamo on","players":[{"a":8,"clutch":0,"d":16,"dmg":2324,"fk":0,"flash":2,"hs":12,"id":"251985","k":23,"kastRounds":17,"level":16,"mk2":2,"mk3":1,"mk4":2,"mk5":0,"nick":"TomPz","rounds":21,"rp":-6},{"a":6,"clutch":0,"d":15,"dmg":1400,"fk":3,"flash":0,"hs":3,"id":"1189694","k":11,"kastRounds":13,"level":16,"mk2":1,"mk3":1,"mk4":0,"mk5":0,"nick":"J.Rocha","rounds":21,"rp":-12},{"a":1,"clutch":0,"d":16,"dmg":737,"fk":0,"flash":0,"hs":3,"id":"1035547","k":8,"kastRounds":9,"level":11,"mk2":1,"mk3":0,"mk4":0,"mk5":0,"nick":"xTheHoSt","rounds":21,"rp":-14}],"score":[8,13],"win":false},{"date":"2026-09-22T20:17","dateLabel":"22/09/2026 20:17","duration":"52 Minutes","id":"27926250","link":"https://gamersclub.com.br/lobby/match/27926250","map":"de_inferno","opponent":"Team DJ UILTON","players":[{"a":13,"clutch":0,"d":14,"dmg":2466,"fk":1,"flash":1,"hs":6,"id":"251985","k":23,"kastRounds":21,"level":16,"mk2":6,"mk3":1,"mk4":0,"mk5":0,"nick":"TomPz","rounds":24,"rp":-8},{"a":9,"clutch":0,"d":14,"dmg":1955,"fk":1,"flash":0,"hs":11,"id":"1035547","k":22,"kastRounds":22,"level":11,"mk2":5,"mk3":1,"mk4":0,"mk5":0,"nick":"xTheHoSt","rounds":24,"rp":-10},{"a":5,"clutch":0,"d":17,"dmg":1291,"fk":1,"flash":0,"hs":6,"id":"1852904","k":16,"kastRounds":16,"level":13,"mk2":1,"mk3":1,"mk4":0,"mk5":0,"nick":"Markin","rounds":24,"rp":-17},{"a":13,"clutch":0,"d":21,"dmg":2361,"fk":3,"flash":1,"hs":11,"id":"392073","k":19,"kastRounds":19,"level":15,"mk2":6,"mk3":0,"mk4":0,"mk5":0,"nick":"Keke","rounds":24,"rp":-12}],"score":[11,13],"win":false},{"date":"2026-09-22T19:22","dateLabel":"22/09/2026 19:22","duration":"44 Minutes","id":"27925597","link":"https://gamersclub.com.br/lobby/match/27925597","map":"de_mirage","opponent":"Team pitchuleco","players":[{"a":6,"clutch":0,"d":16,"dmg":2466,"fk":3,"flash":3,"hs":16,"id":"251985","k":26,"kastRounds":21,"level":16,"mk2":7,"mk3":2,"mk4":0,"mk5":0,"nick":"TomPz","rounds":24,"rp":-9},{"a":5,"clutch":0,"d":20,"dmg":1580,"fk":2,"flash":0,"hs":10,"id":"1035547","k":14,"kastRounds":14,"level":11,"mk2":3,"mk3":0,"mk4":0,"mk5":0,"nick":"xTheHoSt","rounds":24,"rp":-16},{"a":8,"clutch":0,"d":21,"dmg":1989,"fk":2,"flash":1,"hs":4,"id":"1852904","k":15,"kastRounds":18,"level":13,"mk2":2,"mk3":0,"mk4":0,"mk5":0,"nick":"Markin","rounds":24,"rp":-10},{"a":4,"clutch":0,"d":21,"dmg":1839,"fk":3,"flash":0,"hs":8,"id":"392073","k":15,"kastRounds":12,"level":15,"mk2":2,"mk3":2,"mk4":0,"mk5":0,"nick":"Keke","rounds":24,"rp":-15}],"score":[11,13],"win":false},{"date":"2026-09-21T19:54","dateLabel":"21/09/2026 19:54","duration":"34 Minutes","id":"27918722","link":"https://gamersclub.com.br/lobby/match/27918722","map":"de_nuke","opponent":"Team Jolo","players":[{"a":3,"clutch":0,"d":16,"dmg":951,"fk":1,"flash":0,"hs":3,"id":"251985","k":6,"kastRounds":9,"level":16,"mk2":0,"mk3":0,"mk4":0,"mk5":0,"nick":"TomPz","rounds":18,"rp":-17},{"a":1,"clutch":0,"d":14,"dmg":1149,"fk":1,"flash":0,"hs":5,"id":"1852904","k":12,"kastRounds":9,"level":13,"mk2":0,"mk3":0,"mk4":1,"mk5":0,"nick":"Markin","rounds":18,"rp":-11},{"a":1,"clutch":0,"d":15,"dmg":1357,"fk":2,"flash":0,"hs":7,"id":"392073","k":12,"kastRounds":8,"level":15,"mk2":3,"mk3":1,"mk4":0,"mk5":0,"nick":"Keke","rounds":18,"rp":-12},{"a":5,"clutch":0,"d":16,"dmg":1994,"fk":3,"flash":0,"hs":8,"id":"1189694","k":15,"kastRounds":14,"level":16,"mk2":3,"mk3":0,"mk4":0,"mk5":0,"nick":"J.Rocha","rounds":18,"rp":-7}],"score":[5,13],"win":false},{"date":"2026-09-21T19:10","dateLabel":"21/09/2026 19:10","duration":"39 Minutes","id":"27918253","link":"https://gamersclub.com.br/lobby/match/27918253","map":"de_overpass","opponent":"Team joza","players":[{"a":1,"clutch":0,"d":18,"dmg":1947,"fk":1,"flash":0,"hs":9,"id":"251985","k":22,"kastRounds":11,"level":16,"mk2":2,"mk3":5,"mk4":0,"mk5":0,"nick":"TomPz","rounds":21,"rp":-12},{"a":4,"clutch":0,"d":19,"dmg":905,"fk":1,"flash":0,"hs":2,"id":"1035547","k":5,"kastRounds":9,"level":12,"mk2":0,"mk3":0,"mk4":0,"mk5":0,"nick":"xTheHoSt","rounds":21,"rp":-19},{"a":1,"clutch":0,"d":14,"dmg":1453,"fk":2,"flash":0,"hs":4,"id":"1852904","k":16,"kastRounds":14,"level":13,"mk2":2,"mk3":1,"mk4":0,"mk5":0,"nick":"Markin","rounds":21,"rp":-13},{"a":9,"clutch":0,"d":19,"dmg":1466,"fk":0,"flash":1,"hs":3,"id":"392073","k":10,"kastRounds":13,"level":15,"mk2":2,"mk3":0,"mk4":0,"mk5":0,"nick":"Keke","rounds":21,"rp":-15},{"a":3,"clutch":0,"d":15,"dmg":1791,"fk":4,"flash":0,"hs":10,"id":"1189694","k":15,"kastRounds":13,"level":16,"mk2":2,"mk3":0,"mk4":1,"mk5":0,"nick":"J.Rocha","rounds":21,"rp":-12}],"score":[8,13],"win":false},{"date":"2026-09-21T18:41","dateLabel":"21/09/2026 18:41","duration":"28 Minutes","id":"27918001","link":"https://gamersclub.com.br/lobby/match/27918001","map":"de_mirage","opponent":"Team FNX do sertao","players":[{"a":3,"clutch":0,"d":14,"dmg":1616,"fk":3,"flash":0,"hs":7,"id":"1852904","k":15,"kastRounds":9,"level":13,"mk2":2,"mk3":2,"mk4":0,"mk5":0,"nick":"Markin","rounds":17,"rp":-7},{"a":3,"clutch":0,"d":14,"dmg":1323,"fk":2,"flash":2,"hs":5,"id":"392073","k":10,"kastRounds":10,"level":15,"mk2":1,"mk3":0,"mk4":0,"mk5":0,"nick":"Keke","rounds":17,"rp":-11},{"a":5,"clutch":0,"d":16,"dmg":898,"fk":3,"flash":1,"hs":3,"id":"251985","k":6,"kastRounds":8,"level":16,"mk2":1,"mk3":0,"mk4":0,"mk5":0,"nick":"TomPz","rounds":17,"rp":-16},{"a":2,"clutch":0,"d":17,"dmg":757,"fk":0,"flash":0,"hs":6,"id":"1035547","k":9,"kastRounds":7,"level":12,"mk2":3,"mk3":0,"mk4":0,"mk5":0,"nick":"xTheHoSt","rounds":17,"rp":-16},{"a":5,"clutch":0,"d":15,"dmg":1436,"fk":0,"flash":0,"hs":2,"id":"1189694","k":9,"kastRounds":9,"level":16,"mk2":1,"mk3":1,"mk4":0,"mk5":0,"nick":"J.Rocha","rounds":17,"rp":-12}],"score":[4,13],"win":false},{"date":"2026-09-20T21:33","dateLabel":"20/09/2026 21:33","duration":"29 Minutes","id":"27913440","link":"https://gamersclub.com.br/lobby/match/27913440","map":"de_mirage","opponent":"Team HuG","players":[{"a":5,"clutch":0,"d":10,"dmg":1162,"fk":1,"flash":1,"hs":4,"id":"251985","k":11,"kastRounds":11,"level":17,"mk2":2,"mk3":1,"mk4":0,"mk5":0,"nick":"TomPz","rounds":13,"rp":9},{"a":10,"clutch":0,"d":12,"dmg":1339,"fk":2,"flash":0,"hs":4,"id":"1035547","k":7,"kastRounds":12,"level":12,"mk2":1,"mk3":1,"mk4":0,"mk5":0,"nick":"xTheHoSt","rounds":13,"rp":13},{"a":2,"clutch":0,"d":8,"dmg":893,"fk":4,"flash":0,"hs":2,"id":"1852904","k":11,"kastRounds":9,"level":13,"mk2":3,"mk3":0,"mk4":0,"mk5":0,"nick":"Markin","rounds":13,"rp":11},{"a":4,"clutch":0,"d":8,"dmg":1840,"fk":4,"flash":0,"hs":10,"id":"392073","k":18,"kastRounds":12,"level":15,"mk2":5,"mk3":1,"mk4":0,"mk5":0,"nick":"Keke","rounds":13,"rp":15},{"a":1,"clutch":0,"d":3,"dmg":997,"fk":0,"flash":0,"hs":8,"id":"1189694","k":16,"kastRounds":12,"level":16,"mk2":4,"mk3":0,"mk4":1,"mk5":0,"nick":"J.Rocha","rounds":13,"rp":15}],"score":[13,0],"win":true},{"date":"2026-09-20T20:52","dateLabel":"20/09/2026 20:52","duration":"38 Minutes","id":"27912879","link":"https://gamersclub.com.br/lobby/match/27912879","map":"de_overpass","opponent":"Team daves","players":[{"a":3,"clutch":0,"d":13,"dmg":2093,"fk":1,"flash":0,"hs":15,"id":"251985","k":21,"kastRounds":17,"level":16,"mk2":2,"mk3":2,"mk4":0,"mk5":0,"nick":"TomPz","rounds":20,"rp":16},{"a":3,"clutch":0,"d":13,"dmg":1693,"fk":2,"flash":0,"hs":6,"id":"1035547","k":15,"kastRounds":15,"level":12,"mk2":5,"mk3":0,"mk4":0,"mk5":0,"nick":"xTheHoSt","rounds":20,"rp":17},{"a":5,"clutch":0,"d":12,"dmg":1549,"fk":4,"flash":1,"hs":11,"id":"392073","k":16,"kastRounds":12,"level":15,"mk2":2,"mk3":1,"mk4":1,"mk5":0,"nick":"Keke","rounds":20,"rp":16},{"a":3,"clutch":0,"d":13,"dmg":1401,"fk":3,"flash":0,"hs":6,"id":"1189694","k":14,"kastRounds":12,"level":16,"mk2":3,"mk3":0,"mk4":0,"mk5":0,"nick":"J.Rocha","rounds":20,"rp":12},{"a":10,"clutch":0,"d":15,"dmg":1371,"fk":2,"flash":1,"hs":4,"id":"1852904","k":11,"kastRounds":14,"level":13,"mk2":1,"mk3":1,"mk4":0,"mk5":0,"nick":"Markin","rounds":20,"rp":14}],"score":[13,7],"win":true},{"date":"2026-09-20T20:01","dateLabel":"20/09/2026 20:01","duration":"39 Minutes","id":"27912227","link":"https://gamersclub.com.br/lobby/match/27912227","map":"de_ancient","opponent":"Team HG Eletronicos","players":[{"a":10,"clutch":0,"d":14,"dmg":2306,"fk":5,"flash":3,"hs":12,"id":"392073","k":25,"kastRounds":18,"level":15,"mk2":3,"mk3":4,"mk4":0,"mk5":0,"nick":"Keke","rounds":22,"rp":16},{"a":8,"clutch":0,"d":16,"dmg":1927,"fk":3,"flash":0,"hs":13,"id":"1189694","k":17,"kastRounds":16,"level":16,"mk2":3,"mk3":1,"mk4":0,"mk5":0,"nick":"J.Rocha","rounds":22,"rp":11},{"a":4,"clutch":0,"d":17,"dmg":1734,"fk":3,"flash":0,"hs":7,"id":"1852904","k":17,"kastRounds":14,"level":13,"mk2":2,"mk3":2,"mk4":0,"mk5":0,"nick":"Markin","rounds":22,"rp":11},{"a":7,"clutch":0,"d":15,"dmg":1466,"fk":2,"flash":1,"hs":4,"id":"251985","k":12,"kastRounds":14,"level":16,"mk2":2,"mk3":0,"mk4":0,"mk5":0,"nick":"TomPz","rounds":22,"rp":7},{"a":3,"clutch":0,"d":15,"dmg":1382,"fk":0,"flash":0,"hs":7,"id":"1035547","k":12,"kastRounds":14,"level":11,"mk2":2,"mk3":0,"mk4":0,"mk5":0,"nick":"xTheHoSt","rounds":22,"rp":9}],"score":[13,9],"win":true},{"date":"2026-09-20T19:25","dateLabel":"20/09/2026 19:25","duration":"33 Minutes","id":"27911776","link":"https://gamersclub.com.br/lobby/match/27911776","map":"de_nuke","opponent":"Team Spark Mandril","players":[{"a":1,"clutch":0,"d":12,"dmg":1772,"fk":3,"flash":0,"hs":13,"id":"1189694","k":17,"kastRounds":11,"level":16,"mk2":3,"mk3":2,"mk4":0,"mk5":0,"nick":"J.Rocha","rounds":18,"rp":13},{"a":6,"clutch":0,"d":14,"dmg":1757,"fk":4,"flash":2,"hs":12,"id":"392073","k":14,"kastRounds":13,"level":15,"mk2":3,"mk3":1,"mk4":0,"mk5":0,"nick":"Keke","rounds":18,"rp":15},{"a":1,"clutch":0,"d":12,"dmg":1715,"fk":3,"flash":0,"hs":13,"id":"251985","k":18,"kastRounds":11,"level":16,"mk2":1,"mk3":3,"mk4":0,"mk5":0,"nick":"TomPz","rounds":18,"rp":13},{"a":1,"clutch":0,"d":10,"dmg":1623,"fk":0,"flash":0,"hs":6,"id":"1852904","k":17,"kastRounds":14,"level":13,"mk2":3,"mk3":0,"mk4":1,"mk5":0,"nick":"Markin","rounds":18,"rp":15},{"a":4,"clutch":0,"d":12,"dmg":1014,"fk":0,"flash":0,"hs":3,"id":"1035547","k":8,"kastRounds":8,"level":11,"mk2":2,"mk3":0,"mk4":0,"mk5":0,"nick":"xTheHoSt","rounds":18,"rp":9}],"score":[13,5],"win":true},{"date":"2026-09-20T18:39","dateLabel":"20/09/2026 18:39","duration":"41 Minutes","id":"27911226","link":"https://gamersclub.com.br/lobby/match/27911226","map":"de_inferno","opponent":"Team Spark Mandril","players":[{"a":7,"clutch":0,"d":16,"dmg":2124,"fk":1,"flash":1,"hs":6,"id":"251985","k":15,"kastRounds":14,"level":16,"mk2":5,"mk3":0,"mk4":0,"mk5":0,"nick":"TomPz","rounds":23,"rp":-11},{"a":3,"clutch":0,"d":16,"dmg":1776,"fk":4,"flash":0,"hs":10,"id":"1189694","k":15,"kastRounds":15,"level":16,"mk2":3,"mk3":0,"mk4":0,"mk5":0,"nick":"J.Rocha","rounds":23,"rp":-12},{"a":4,"clutch":0,"d":17,"dmg":1668,"fk":0,"flash":1,"hs":8,"id":"392073","k":17,"kastRounds":16,"level":15,"mk2":4,"mk3":0,"mk4":0,"mk5":0,"nick":"Keke","rounds":23,"rp":-12},{"a":4,"clutch":0,"d":12,"dmg":1476,"fk":2,"flash":1,"hs":3,"id":"1852904","k":13,"kastRounds":17,"level":13,"mk2":1,"mk3":1,"mk4":0,"mk5":0,"nick":"Markin","rounds":23,"rp":-10},{"a":4,"clutch":0,"d":19,"dmg":1269,"fk":2,"flash":0,"hs":6,"id":"1035547","k":11,"kastRounds":11,"level":12,"mk2":1,"mk3":1,"mk4":0,"mk5":0,"nick":"xTheHoSt","rounds":23,"rp":-16}],"score":[10,13],"win":false},{"date":"2026-09-20T17:59","dateLabel":"20/09/2026 17:59","duration":"38 Minutes","id":"27910751","link":"https://gamersclub.com.br/lobby/match/27910751","map":"de_mirage","opponent":"Team Salvadoy","players":[{"a":4,"clutch":0,"d":15,"dmg":2347,"fk":2,"flash":1,"hs":10,"id":"1852904","k":26,"kastRounds":16,"level":13,"mk2":6,"mk3":2,"mk4":1,"mk5":0,"nick":"Markin","rounds":23,"rp":17},{"a":8,"clutch":0,"d":18,"dmg":2154,"fk":8,"flash":1,"hs":9,"id":"392073","k":18,"kastRounds":17,"level":15,"mk2":5,"mk3":0,"mk4":0,"mk5":0,"nick":"Keke","rounds":23,"rp":15},{"a":4,"clutch":0,"d":15,"dmg":1866,"fk":2,"flash":1,"hs":9,"id":"1189694","k":21,"kastRounds":18,"level":16,"mk2":5,"mk3":3,"mk4":0,"mk5":0,"nick":"J.Rocha","rounds":23,"rp":13},{"a":5,"clutch":0,"d":16,"dmg":1147,"fk":0,"flash":1,"hs":5,"id":"251985","k":9,"kastRounds":15,"level":16,"mk2":0,"mk3":0,"mk4":0,"mk5":0,"nick":"TomPz","rounds":23,"rp":8},{"a":8,"clutch":0,"d":19,"dmg":1144,"fk":0,"flash":0,"hs":5,"id":"1035547","k":9,"kastRounds":12,"level":11,"mk2":2,"mk3":0,"mk4":0,"mk5":0,"nick":"xTheHoSt","rounds":23,"rp":8}],"score":[13,10],"win":true},{"date":"2026-09-20T17:19","dateLabel":"20/09/2026 17:19","duration":"39 Minutes","id":"27910296","link":"https://gamersclub.com.br/lobby/match/27910296","map":"de_overpass","opponent":"Team dnzt;","players":[{"a":0,"clutch":0,"d":14,"dmg":2205,"fk":2,"flash":0,"hs":11,"id":"1852904","k":22,"kastRounds":15,"level":13,"mk2":6,"mk3":1,"mk4":0,"mk5":0,"nick":"Markin","rounds":19,"rp":-6},{"a":5,"clutch":0,"d":16,"dmg":1567,"fk":1,"flash":0,"hs":4,"id":"392073","k":11,"kastRounds":12,"level":15,"mk2":1,"mk3":1,"mk4":0,"mk5":0,"nick":"Keke","rounds":19,"rp":-11},{"a":5,"clutch":0,"d":16,"dmg":1343,"fk":3,"flash":0,"hs":7,"id":"1189694","k":14,"kastRounds":13,"level":16,"mk2":3,"mk3":1,"mk4":0,"mk5":0,"nick":"J.Rocha","rounds":19,"rp":-10},{"a":4,"clutch":0,"d":17,"dmg":1099,"fk":2,"flash":1,"hs":5,"id":"251985","k":8,"kastRounds":10,"level":16,"mk2":2,"mk3":0,"mk4":0,"mk5":0,"nick":"TomPz","rounds":19,"rp":-16},{"a":1,"clutch":0,"d":17,"dmg":875,"fk":1,"flash":0,"hs":4,"id":"1035547","k":7,"kastRounds":7,"level":12,"mk2":1,"mk3":0,"mk4":0,"mk5":0,"nick":"xTheHoSt","rounds":19,"rp":-15}],"score":[6,13],"win":false}];
+const byDate = (a, b) => String(b.date).localeCompare(String(a.date));
+function setMatches(list) {
+  const map = new Map(SNAPSHOT.map(m => [m.id, m]));
+  list.forEach(m => map.set(m.id, m));
+  allMatches = [...map.values()].sort(byDate);
+  render();
+}
+
+renderRoster();
+renderChips();
+setMatches([]);
+
+(async () => {
+  const db = window.claude?.use ? await window.claude.use("db") : null;
+  if (!db) return;
+  db.collection("matches").onSnapshot(snap => {
+    setMatches(snap.docs.map(d => d.data()).filter(Boolean));
+  }, () => {});
+})();
+</script>
+
+</body>
+</html>
