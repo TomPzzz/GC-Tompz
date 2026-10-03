@@ -250,7 +250,7 @@ footer code { font-family: var(--mono); color: var(--ink); }
   <section class="section">
     <h2>Stats por jogador</h2>
     <div id="boardWrap"></div>
-    <details class="legend"><summary>O que significa cada coluna</summary>Somas e médias só das partidas do período. P = partidas · V% = vitórias · DIF = kills menos deaths · ADR = dano médio por round · HS% = kills de headshot · KAST = % de rounds com kill, assist, sobrevivência ou trade · FK = first kills · 3K+ = rounds com 3 ou mais kills · RP = pontos de rating ganhos ou perdidos. Clique numa coluna para ordenar; o melhor valor de cada coluna fica em destaque.</details>
+    <details class="legend"><summary>O que significa cada coluna</summary>Somas e médias só das partidas do período. P = partidas · V% = vitórias · DIF = kills menos deaths · ADR = dano médio por round · HS% = kills de headshot · KAST = % de rounds com kill, assist, sobrevivência ou trade · FK = first kills · FK/P = média de first kills por partida · 3K+ = rounds com 3 ou mais kills · RP = pontos de rating ganhos ou perdidos. Clique numa coluna para ordenar; o melhor valor de cada coluna fica em destaque.</details>
   </section>
 
   <section class="section">
@@ -289,6 +289,7 @@ const COLS = [
   { key: "kastPct", label: "KAST", fmt: v => v.toFixed(0) + "%" },
   { key: "dmg", label: "Dano", fmt: v => v.toLocaleString("pt-BR"), grp: true },
   { key: "fk", label: "FK", fmt: v => v },
+  { key: "fkpm", label: "FK/P", fmt: v => v.toFixed(2) },
   { key: "mk3", label: "3K+", fmt: v => v },
   { key: "clutch", label: "Clutch", fmt: v => v },
   { key: "rp", label: "RP", fmt: v => (v > 0 ? "+" : "") + v, signed: true }
@@ -349,6 +350,7 @@ function withRates(s) {
     winPct: s.matches ? 100 * s.wins / s.matches : 0,
     kdr: s.d ? s.k / s.d : s.k,
     kpr: s.rounds ? s.k / s.rounds : 0,
+    fkpm: s.matches ? s.fk / s.matches : 0,
     adr: s.rounds ? s.dmg / s.rounds : 0,
     hsPct: s.k ? 100 * s.hs / s.k : 0,
     kastPct: s.rounds ? 100 * s.kastRounds / s.rounds : 0
