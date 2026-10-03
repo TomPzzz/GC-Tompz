@@ -238,7 +238,7 @@ footer code { font-family: var(--mono); color: var(--ink); }
       <div class="panel">
         <div class="ptitle"><span>Ranking</span><span class="pnote">nota · 100 = média do stack</span></div>
         <div class="rank" id="rank"></div>
-        <details class="legend"><summary>Como a nota é calculada</summary>Cada métrica é comparada com a média do stack no período (100 = na média). Pesos: ADR 30%, K/D 20%, KAST 20%, first kills por round 10%, 3K+ por round 10% e vitórias 10%. Entra quem jogou pelo menos 30% das partidas do período.</details>
+        <details class="legend"><summary>Como a nota é calculada</summary>Cada métrica é comparada com a média do stack no período (100 = na média). Pesos: ADR 30%, K/D 20%, KAST 20%, first kills por partida (FK/P) 10%, 3K+ por round 10% e vitórias 10%. Entra quem jogou pelo menos 30% das partidas do período.</details>
       </div>
       <div class="panel">
         <div class="ptitle"><span>Mapas</span><span class="pnote">% de vitória</span></div>
@@ -409,14 +409,14 @@ const RANK_METRICS = [
   { key: "adr", label: "ADR", w: 30 },
   { key: "kdr", label: "K/D", w: 20 },
   { key: "kastPct", label: "KAST", w: 20 },
-  { key: "fkr", label: "First kills", w: 10 },
+  { key: "fkpm", label: "FK/P", w: 10 },
   { key: "mk3r", label: "3K+", w: 10 },
   { key: "winPct", label: "Vitórias", w: 10 }
 ];
 function renderRank(stats, matches) {
   const box = document.getElementById("rank");
   const minP = Math.max(1, Math.ceil(matches.length * 0.3));
-  const rows = stats.filter(s => s.matches >= minP).map(s => ({ ...s, fkr: s.rounds ? s.fk / s.rounds : 0, mk3r: s.rounds ? s.mk3 / s.rounds : 0 }));
+  const rows = stats.filter(s => s.matches >= minP).map(s => ({ ...s, mk3r: s.rounds ? s.mk3 / s.rounds : 0 }));
   const out = stats.filter(s => s.matches && s.matches < minP);
   if (rows.length < 2) { box.replaceChildren(el("div", "rout", "O ranking aparece quando pelo menos dois jogadores têm partidas suficientes no período.")); return; }
   const avg = {};
